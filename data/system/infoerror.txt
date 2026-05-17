@@ -1,0 +1,91 @@
+════════════════════════════════════════════════════════════════════════
+  ██╗███╗   ██╗███████╗ ██████╗     ███████╗██████╗ ██████╗  ██████╗ ██████╗
+  ██║████╗  ██║██╔════╝██╔═══██╗    ██╔════╝██╔══██╗██╔══██╗██╔═══██╗██╔══██╗
+  ██║██╔██╗ ██║█████╗  ██║   ██║    █████╗  ██████╔╝██████╔╝██║   ██║██████╔╝
+  ██║██║╚██╗██║██╔══╝  ██║   ██║    ██╔══╝  ██╔══██╗██╔══██╗██║   ██║██╔══██╗
+  ██║██║ ╚████║██║     ╚██████╔╝    ███████╗██║  ██║██║  ██║╚██████╔╝██║  ██║
+  ╚═╝╚═╝  ╚═══╝╚═╝      ╚═════╝     ╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═╝
+════════════════════════════════════════════════════════════════════════
+  FILE     : infoerror.txt
+  Bot      : Wily Bot
+  Update   : 17/05/2026, 12.00.31  (realtime — diperbarui otomatis setiap ada error)
+════════════════════════════════════════════════════════════════════════
+
+  RINGKASAN
+────────────────────────────────────────────────────────────────────────
+  Total Jenis Error (unik)  : 3
+  Total Kejadian Error       : 21
+  Maks. Simpan               : 200 jenis error
+  Deduplikasi                : AKTIF — error sama digabung, tidak dicatat ulang
+  Urutan                     : Terbaru di atas
+
+  DAFTAR ERROR LENGKAP  [3 jenis, 21 kejadian total]
+────────────────────────────────────────────────────────────────────────
+
+┌───────────────────────────────────────────────────────────────────────
+│  #001  —  MALNews
+├┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+│  PESAN ERROR
+│  [MALNews] Error scheduler: Cannot find module 'axios'
+Require stack:
+- /home/runner/workspace/src/scrape/malnews.cjs
+- /home/runner/workspace/index.js
+│
+│  DETAIL
+│  Sumber      : MALNews
+│  Frekuensi   : 3x (duplikat digabung)
+│  Pertama     : 17/05/2026, 11.47.46
+│  Terakhir    : 17/05/2026, 11.57.46
+│
+│  STACK TRACE (3 baris pertama)
+│  ▶  Error: [MALNews] Error scheduler: Cannot find module 'axios'
+│     Require stack:
+│     - /home/runner/workspace/src/scrape/malnews.cjs
+└───────────────────────────────────────────────────────────────────────
+
+┌───────────────────────────────────────────────────────────────────────
+│  #002  —  TVOneNews
+├┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+│  PESAN ERROR
+│  [TVOneNews] Error scheduler: Cannot find module 'axios'
+Require stack:
+- /home/runner/workspace/src/scrape/tvonenews.cjs
+- /home/runner/workspace/index.js
+│
+│  DETAIL
+│  Sumber      : TVOneNews
+│  Frekuensi   : 3x (duplikat digabung)
+│  Pertama     : 17/05/2026, 11.47.31
+│  Terakhir    : 17/05/2026, 11.57.31
+│
+│  STACK TRACE (3 baris pertama)
+│  ▶  Error: [TVOneNews] Error scheduler: Cannot find module 'axios'
+│     Require stack:
+│     - /home/runner/workspace/src/scrape/tvonenews.cjs
+└───────────────────────────────────────────────────────────────────────
+
+┌───────────────────────────────────────────────────────────────────────
+│  #003  —  AlqanimeNotif
+├┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+│  PESAN ERROR
+│  [AlqanimeNotif] Error scheduler: Cannot find module 'axios'
+Require stack:
+- /home/runner/workspace/src/scrape/alqanime-monitor.cjs
+- /home/runner/workspace/index.js
+│
+│  DETAIL
+│  Sumber      : AlqanimeNotif
+│  Frekuensi   : 15x (duplikat digabung)
+│  Pertama     : 17/05/2026, 11.46.31
+│  Terakhir    : 17/05/2026, 12.00.31
+│
+│  STACK TRACE (3 baris pertama)
+│  ▶  Error: [AlqanimeNotif] Error scheduler: Cannot find module 'axios'
+│     Require stack:
+│     - /home/runner/workspace/src/scrape/alqanime-monitor.cjs
+└───────────────────────────────────────────────────────────────────────
+
+════════════════════════════════════════════════════════════════════════
+  End of Report  —  Total: 3 jenis, 21 kejadian
+  Terakhir diperbarui: 17/05/2026, 12.00.31
+════════════════════════════════════════════════════════════════════════

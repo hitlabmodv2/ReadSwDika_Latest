@@ -1,0 +1,33 @@
+app = "wily-bot"
+primary_region = "sin"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  BOT_LOGGER_LEVEL = "silent"
+  BOT_LOG_MESSAGE = "true"
+  BOT_MAX_RETRIES = "5"
+  BOT_SESSION_NAME = "hisoka"
+  BOT_ALLOWED_NO_PREFIX = "true"
+  BOT_PREFIX = "."
+
+[processes]
+  app = "node index.js"
+
+[[mounts]]
+  source = "sessions_vol"
+  destination = "/app/sessions"
+
+[[mounts]]
+  source = "jadibot_vol"
+  destination = "/app/jadibot"
+
+[[mounts]]
+  source = "data_vol"
+  destination = "/app/data"
+
+[[vm]]
+  memory = "512mb"
+  cpu_kind = "shared"
+  cpus = 1

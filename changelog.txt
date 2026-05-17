@@ -1,0 +1,213 @@
+🤖 *WILY BOT — V17.3*
+_📅 15 Mei 2026_
+📦 12 Update | 🔧 6 Bug Fix | ✨ 1 Fitur Baru | 🚀 5 Improvement
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+🚀 *IMPROVEMENT*
+
+> 🎯 *`.ceksw` — Tampilan Lebih Ringkas*
+> Output `.ceksw` dirampingkan jadi 1 baris per orang di semua section
+> ├ *SW AKTIF SEKARANG* — tiap baris: medal + nama + jumlah SW (hapus bar progress & ikon 🟢 per baris)
+> ├ *TOP TERBANYAK DI-REACT* — tiap baris: medal + nama + ×reaction (persen) saja
+> └ Tidak ada duplikasi info — ikon & detail cukup tampil 1x di header section
+>
+> 🎯 *`push.sh` — Nomor Menu Berurutan*
+> Penomoran menu utama diurutkan ulang agar berurutan dalam tiap group
+> ├ BRANCH: 1–7 (1=Upload, 2=Buat, 3=Hapus, 4=Ganti default, 5=Cek token, 6=Edit nama, 7=Status)
+> └ REPOSITORY: 8–14 (8=Rename, 9=Buat, 10=Import, 11=Hapus, 12=Semua, 13=Releases, 14=Ganti repo)
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+🔧 *BUG FIX*
+
+> 🎯 *No-Prefix Command — Respons Tidak Akurat (Extra Words)*
+> Command tanpa prefix merespons meski ada kata tambahan di belakangnya
+> Contoh: mengetik `info dulu` atau `ping bla bla` tanpa prefix → bot merespons
+> Harusnya command no-prefix hanya merespons kalau diketik *persis* tanpa kata tambahan
+> Diperbaiki dengan guard `if (!m.prefix && m.query) break` di setiap command standalone
+> Command yang butuh query (seperti `tanya`, `cuaca`, dll) tidak terpengaruh
+> Berlaku di bot utama maupun userjadibot — handler sama (`message.js`)
+>
+> *Command standalone yang kini dilindungi (29 guard total):*
+> ├ `info`
+> ├ `ping` / `p`
+> ├ `menu` / `allmenu` / `settingmenu` / `groupmenu` / `statusmenu` / `downloadmenu`
+> ├ `jadibotmenu` / `ownermenu`
+> ├ `owner` / `own`
+> ├ `listbot` / `listemoji`
+> ├ `q` / `quoted`
+> ├ `memori` / `mymemory` / `myprofile`
+> ├ `memory` _(memory monitor — command berbeda dari alias memori)_
+> ├ `lupakanaku` / `resetmemori` / `resetmemory` / `forgetme`
+> ├ `speedtest` / `speed` / `cekspeed` / `testnet`
+> ├ `ram`
+> ├ `group` / `listgroup`
+> ├ `contact` / `listcontact`
+> ├ `dbstats` / `sessiondb` / `sessionstat`
+> ├ `nhrand`
+> ├ `komikupdate` / `komikup`
+> ├ `kusoupdate` / `kusonimeupdate` / `animeupdate`
+> ├ `alqupdate` / `alqanimeupdate`
+> ├ `cekreact` / `reactinfo`
+> ├ `backup`
+> ╰ `ceksesi`
+
+> 🎌 *Animasu — URL Anime Season Ke-2/3 Selalu 404*
+> Slug di URL Animasu tidak konsisten untuk season lanjutan
+> Contoh: anime pakai `-s2` bukan `-season-2`, atau slug beda total
+> Ditambahkan `fetchAnimeUrlFromEpisodePage()` sebagai fallback
+> Fungsi ambil URL anime asli dari halaman episode langsung
+> Berlaku di `cariEpisodeBaru()`, `simulasi()`, `getAiringStatus()`
+
+> 🔁 *Animasu — Fungsi simulasi() Tidak Pakai Fallback URL*
+> `simulasi()` langsung crash kalau slug anime 404
+> Kini pakai fallback URL sama seperti `cariEpisodeBaru()`
+
+> 📊 *Animasu — getAiringStatus() Diam-diam Drop Anime Season*
+> Anime season ke-2/3 selalu gagal fetch dan dibuang tanpa error
+> `postLink` tidak disimpan di map sehingga fallback tidak bisa jalan
+> Kini `postLink` disimpan di map dan fallback aktif untuk semua entry
+
+> 📨 *Animasu — Notifikasi Episode Sama Muncul 2 Kali*
+> Animasu terkadang upload 2 post berbeda untuk 1 episode yang sama
+> Kedua post punya ID berbeda sehingga lolos dedup `idTerkirim`
+> Kini dedup tambahan by `animeSlug + epNum` sebelum kirim
+
+> ⚡ *Speedtest — require is not defined di message.js*
+> `message.js` pakai ES module, tidak bisa pakai `require()` langsung
+> Command `.speedtest` error saat pertama dijalankan
+> Diganti ke `_require()` (createRequire) sesuai pola file lain
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+🚀 *IMPROVEMENT / OPTIMASI*
+
+> 📡 *Notifikasi Grup — Kirim Parallel, Bukan Satu-satu*
+> Sebelumnya kirim ke grup satu per satu dengan jeda 2 detik
+> 10 grup = ~20 detik, sekarang jadi ~2 detik
+> Berlaku untuk 3 scheduler: Animasu, InfoWibu, TVOneNews
+> Implementasi: batch 5 grup sekaligus via `Promise.allSettled()`
+> Jeda 1 detik antar batch untuk cegah rate limit WhatsApp
+
+> 📋 *Menu Bot — 8 Command Ditambahkan ke Kategori yang Tepat*
+> Banyak command aktif tapi tidak tampil di `.menu`
+> Ditambahkan ke kategori yang sesuai:
+> ├ 🔍 Info & Cek  : `.speedtest` `.speed` `.cekspeed`
+> ├ 🔍 Info & Cek  : `.shazam` `.tebaklagu` (alias .whatsmusik)
+> ├ 🤖 AI Chat     : `.myprofile` (alias .mymemory)
+> ├ 🤖 AI Chat     : `.resetmemory` (alias .forgetme)
+> ├ 👑 Owner Only  : `.tvone` — auto berita TVOne di grup
+> ├ 👑 Owner Only  : `.cekreact` `.reactinfo` — cek saldo React API
+> ├ 👑 Owner Only  : `.ram` — cek detail RAM & memory bot
+> ├ 👑 Owner Only  : `.sessionstat` — statistik file sesi
+> ╰ Footer menu   : `.statusmenu` ditambahkan ke daftar sub-menu
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+✨ *FITUR BARU*
+
+> 🌐 *Internet Speed Test — Command .speedtest*
+> Test kecepatan internet bot secara realtime
+> Menggunakan Cloudflare Speed Server (speed.cloudflare.com)
+> Tanpa library biner eksternal — murni axios
+> Mengukur: Download Mbps, Upload Mbps, Ping avg/min/max/jitter
+> Info koneksi: ISP, kota, negara, IP address
+> Thumbnail: gambar PNG custom dibuat real-time (SVG → PNG via sharp)
+> Warna kartu berubah sesuai hasil: hijau cepat, merah lambat
+> Selesai dalam ~3–5 detik
+> Alias aktif: `.speedtest` `.speed` `.cekspeed` `.testnet`
+> File: `src/scrape/speedtest.cjs`
+
+━━━━━━━━━━━━━━━━━━━━━━
+🤖 *Wily-Bot* | *V17.3* | _14 Mei 2026_
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🤖 *WILY BOT — V16*
+_📅 11 Mei 2026_
+📦 6 Update | 🔧 4 Bug Fix | ✨ 2 Fitur Baru
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+🔧 *BUG FIX*
+
+> 🛡️ *Anti Call — Jadibot QR Tidak Bisa Tolak Panggilan*
+> Listener event `call` hilang di mode QR
+> Jadibot QR tidak bisa tolak panggilan sama sekali
+> Kini dipasang di *Pairing Code* & *QR Code*
+> Berlaku untuk panggilan *suara* & *video*
+> Whitelist & pesan tolak custom tetap per nomor jadibot
+
+> 🔕 *Anti Call — Command Tidak Direspons Jadibot*
+> `anticall` `ac` `anticallvid` `acv` tidak ada di whitelist
+> Bot diam saja saat command dikirim ke nomor jadibot
+> Semua alias sudah ditambahkan ke allowed command jadibot
+
+> 🚧 *Anti Call — Diblock saat Kirim ke Bot Utama*
+> User jadibot diblock guard saat kirim command ke bot utama
+> Guard lama hanya izinkan: `jadibot` `stopbot` `listbot`
+> Kini `anticall` & `anticallvid` ikut diizinkan tembus guard
+
+> 💾 *Anti Call — Setting Tersimpan ke Tempat yang Salah*
+> Setting tersimpan ke config bot utama, bukan ke jadibot
+> Handler tidak bisa deteksi konteks sender jadibot
+> Kini handler cek sender di `jadibotMap` secara realtime
+> Setting tersimpan ke `jadibot_settings.json[nomor]` yang benar
+> Tidak ada bentrok antar jadibot maupun bot utama
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+✨ *FITUR BARU / TAMBAHAN*
+
+> 🖼️ *Command .hd — Kini Bisa Dipakai User Jadibot*
+> `.hd` / `.remini` kini bisa dipakai user jadibot
+> Ditambahkan ke whitelist command jadibot
+> Tampil di menu jadibot seksi *STICKER & GAMBAR*
+
+> 📋 *Menu Jadibot — Diperbarui & Lebih Lengkap*
+> Seksi sticker berganti jadi *STICKER & GAMBAR*
+> Menampilkan `.hd` / `.remini` sebagai opsi baru
+> Menu kini mencerminkan semua command yang aktif
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+📋 *AKSES USER JADIBOT — TERBARU*
+
+> 🌐 *Umum*
+> `.ping` / `.p` — cek status & ping bot
+> `.menu` — lihat menu jadibot + sisa masa aktif
+
+> ⚙️ *Setting*
+> `.antidel` / `.ad` — anti delete on/off _(per jadibot)_
+> `.readsw` — auto read story on/off _(per jadibot)_
+> `.anticall` / `.ac` — tolak panggilan suara _(per jadibot)_ ✅ *baru*
+> `.anticallvid` / `.acv` — tolak panggilan video _(per jadibot)_ ✅ *baru*
+
+> 🎨 *Sticker & Gambar*
+> `.sticker` / `.s` — buat sticker dari gambar/video
+> `.toimg` — konversi sticker ke gambar
+> `.hd` / `.remini` — perjelas foto blur ✅ *baru*
+> `.rvo` / `.vo` / `.viewonce` — buka pesan view once
+
+> 📥 *Download*
+> `.tt` — TikTok
+> `.ig` — Instagram
+> `.fb` — Facebook
+> `.ytmp3` — YouTube Audio
+> `.ytmp4` — YouTube Video
+> `.play` — cari & download lagu
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+📦 *DATA STORAGE — AKURAT & NO BENTROK*
+
+> 💾 *Semua Setting Tersimpan Per Nomor Jadibot*
+> `[nomor].anticall` — anti call suara
+> `[nomor].anticallvid` — anti call video
+> `[nomor].antidel` — anti delete
+> `[nomor].readsw` — auto read story
+> _Lokasi: `data/jadibot_settings.json`_
+
+━━━━━━━━━━━━━━━━━━━━━━
+🤖 *Wily-Bot* | *V16* | _11 Mei 2026_

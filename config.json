@@ -1,0 +1,167 @@
+{
+  "pairingCode": "WILYCODE",
+  "cekswTracking": true,
+  "owners": [
+    "6289681008411",
+    "6289667923162",
+    "628968820673911"
+  ],
+  "sticker": {
+    "pack": "Alamak",
+    "author": "Anda Siapa?"
+  },
+  "autoOnline": {
+    "enabled": true,
+    "intervalSeconds": 15
+  },
+  "autoTyping": {
+    "enabled": false,
+    "delaySeconds": 1,
+    "privateChat": true,
+    "groupChat": true
+  },
+  "autoRecording": {
+    "enabled": false,
+    "delaySeconds": 1,
+    "privateChat": true,
+    "groupChat": true
+  },
+  "autoReadStory": {
+    "enabled": true,
+    "autoReaction": true,
+    "randomDelay": true,
+    "delayMinMs": 1000,
+    "delayMaxMs": 20000,
+    "fixedDelayMs": 3000
+  },
+  "antiDelete": {
+    "enabled": false,
+    "privateChat": true,
+    "groupChat": true,
+    "sendTo": "chat"
+  },
+  "antiCall": {
+    "enabled": false,
+    "message": "",
+    "whitelist": []
+  },
+  "antiCallVideo": {
+    "enabled": false,
+    "message": "",
+    "whitelist": []
+  },
+  "antiTagSW": {
+    "enabled": true,
+    "maxWarnings": 10
+  },
+  "autoCleaner": {
+    "enabled": true,
+    "intervalHours": 24
+  },
+  "sessionCleaner": {
+    "enabled": true
+  },
+  "telegram": {
+    "enabled": false,
+    "token": "",
+    "chatId": ""
+  },
+  "botReply": {
+    "newsletterJid": "120363312297133690@newsletter",
+    "newsletterName": "Info Seputar Anime Dll 👤",
+    "sourceUrl": "https://wa.me/6289688206739"
+  },
+  "wilyAI": {
+    "enabled": false,
+    "autoReply": true,
+    "privateReply": true,
+    "scope": "all"
+  },
+  "autoSimi": {
+    "enabled": false,
+    "apiKey": ""
+  },
+  "reactApi": {
+    "enabled": false,
+    "apiKey": "",
+    "apiUrl": ""
+  },
+  "memoryMonitor": {
+    "enabled": true,
+    "limitMB": 1000,
+    "checkIntervalMs": 30000,
+    "logIntervalMs": 300000,
+    "logUsage": true,
+    "autoDetectLimit": true,
+    "autoDetectPercentage": 100
+  },
+  "welcomeGoodbye": {
+    "enabled": false,
+    "groups": {
+      "120363419402989015@g.us": {
+        "welcome": true,
+        "goodbye": true
+      },
+      "120363192554714254@g.us": {
+        "welcome": true,
+        "goodbye": true
+      },
+      "120363383540766761@g.us": {
+        "welcome": true
+      }
+    }
+  },
+  "infowibu": {
+    "enabled": true,
+    "groups": {
+      "120363192554714254@g.us": {
+        "enabled": false,
+        "diubahPada": 1778751221640
+      }
+    }
+  },
+  "animasu": {
+    "groups": {
+      "120363192554714254@g.us": {
+        "enabled": false,
+        "diubahPada": 1778838728294
+      }
+    }
+  },
+  "tvonenews": {
+    "groups": {
+      "120363192554714254@g.us": {
+        "enabled": false,
+        "diubahPada": 1778734847132
+      }
+    }
+  },
+  "alqanimenotif": {
+    "groups": {
+      "120363192554714254@g.us": {
+        "enabled": true,
+        "diubahPada": 1778836164591
+      },
+      "120363383540766761@g.us": {
+        "enabled": false,
+        "diubahPada": 1778989104118
+      }
+    }
+  },
+  "malnews": {
+    "groups": {
+      "120363192554714254@g.us": {
+        "enabled": false,
+        "diubahPada": 1778857985017
+      }
+    }
+  },
+  "antiPorn": {
+    "enabled": true,
+    "groups": [
+      "120363419402989015@g.us",
+      "120363192554714254@g.us",
+      "120363383540766761@g.us"
+    ]
+  }
+}

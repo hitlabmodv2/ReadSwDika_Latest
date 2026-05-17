@@ -1,0 +1,17 @@
+{
+  "privacy": {
+    "calladd": "all",
+    "cover_photo": "all",
+    "defense": "off",
+    "dependentaccountmessages": "all",
+    "groupadd": "all",
+    "groupcreation": "on_standard",
+    "messages": "all",
+    "online": "all",
+    "last": "all",
+    "profile": "all",
+    "readreceipts": "all",
+    "status": "contacts",
+    "stickers": "contacts"
+  }
+}

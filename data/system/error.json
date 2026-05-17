@@ -1,0 +1,31 @@
+{
+  "errors": [
+    {
+      "fingerprint": "MALNews::[MALNews] Error scheduler: Cannot find module 'axios'\nRequire stack:\n- /home/runner/workspace/src/scrape/malnews.cjs\n- /",
+      "source": "MALNews",
+      "message": "[MALNews] Error scheduler: Cannot find module 'axios'\nRequire stack:\n- /home/runner/workspace/src/scrape/malnews.cjs\n- /home/runner/workspace/index.js",
+      "stack": "Error: [MALNews] Error scheduler: Cannot find module 'axios'\nRequire stack:\n- /home/runner/workspace/src/scrape/malnews.cjs\n- /home/runner/workspace/index.js\n    at console.error (file:///home/runner/workspace/index.js:350:27)\n    at Timeout.runMALNews [as _onTimeout] (file:///home/runner/workspace/index.js:1062:57)\n    at listOnTimeout (node:internal/timers:581:17)\n    at process.processTimers (node:internal/timers:519:7)",
+      "count": 3,
+      "firstSeen": "2026-05-17T11:47:46.257Z",
+      "lastSeen": "2026-05-17T11:57:46.261Z"
+    },
+    {
+      "fingerprint": "TVOneNews::[TVOneNews] Error scheduler: Cannot find module 'axios'\nRequire stack:\n- /home/runner/workspace/src/scrape/tvonenews.cjs",
+      "source": "TVOneNews",
+      "message": "[TVOneNews] Error scheduler: Cannot find module 'axios'\nRequire stack:\n- /home/runner/workspace/src/scrape/tvonenews.cjs\n- /home/runner/workspace/index.js",
+      "stack": "Error: [TVOneNews] Error scheduler: Cannot find module 'axios'\nRequire stack:\n- /home/runner/workspace/src/scrape/tvonenews.cjs\n- /home/runner/workspace/index.js\n    at console.error (file:///home/runner/workspace/index.js:350:27)\n    at Timeout.runTVOne [as _onTimeout] (file:///home/runner/workspace/index.js:1000:57)\n    at listOnTimeout (node:internal/timers:581:17)\n    at process.processTimers (node:internal/timers:519:7)",
+      "count": 3,
+      "firstSeen": "2026-05-17T11:47:31.272Z",
+      "lastSeen": "2026-05-17T11:57:31.287Z"
+    },
+    {
+      "fingerprint": "AlqanimeNotif::[AlqanimeNotif] Error scheduler: Cannot find module 'axios'\nRequire stack:\n- /home/runner/workspace/src/scrape/alqanime-",
+      "source": "AlqanimeNotif",
+      "message": "[AlqanimeNotif] Error scheduler: Cannot find module 'axios'\nRequire stack:\n- /home/runner/workspace/src/scrape/alqanime-monitor.cjs\n- /home/runner/workspace/index.js",
+      "stack": "Error: [AlqanimeNotif] Error scheduler: Cannot find module 'axios'\nRequire stack:\n- /home/runner/workspace/src/scrape/alqanime-monitor.cjs\n- /home/runner/workspace/index.js\n    at console.error (file:///home/runner/workspace/index.js:350:27)\n    at Timeout.runAlqanime [as _onTimeout] (file:///home/runner/workspace/index.js:922:57)\n    at listOnTimeout (node:internal/timers:581:17)\n    at process.processTimers (node:internal/timers:519:7)",
+      "count": 15,
+      "firstSeen": "2026-05-17T11:46:31.340Z",
+      "lastSeen": "2026-05-17T12:00:31.368Z"
+    }
+  ]
+}

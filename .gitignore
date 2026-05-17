@@ -1,0 +1,42 @@
+dist
+.DS_Store
+server/public
+vite.config.ts.*
+*.tar.gz
+.upm
+tmp/
+bin/
+replit.md
+.local
+.cache
+.cache/
+.config
+data
+index.d.ts
+
+# Force-include .replit
+!.replit
+
+# File tidak perlu di-push
+test_preview.pdf
+zipFile.zip
+*.zip
+*.pdf
+
+# node_modules — JANGAN upload, install via npm install
+node_modules/
+node_modules/**
+
+# Sessions — upload SEMUA isi hisoka
+sessions/**
+!sessions/
+!sessions/hisoka/
+!sessions/hisoka/**
+
+# Jadibot — upload seluruh isi folder
+!jadibot/
+!jadibot/**
+
+.token
+.token.secret
+.repo.last

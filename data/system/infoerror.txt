@@ -8,18 +8,18 @@
 ════════════════════════════════════════════════════════════════════════
   FILE     : infoerror.txt
   Bot      : Wily Bot
-  Update   : 25/05/2026, 05.49.51  (realtime — diperbarui otomatis setiap ada error)
+  Update   : 25/05/2026, 07.13.21  (realtime — diperbarui otomatis setiap ada error)
 ════════════════════════════════════════════════════════════════════════
 
   RINGKASAN
 ────────────────────────────────────────────────────────────────────────
   Total Jenis Error (unik)  : 52
-  Total Kejadian Error       : 1163
+  Total Kejadian Error       : 1165
   Maks. Simpan               : 200 jenis error
   Deduplikasi                : AKTIF — error sama digabung, tidak dicatat ulang
   Urutan                     : Terbaru di atas
 
-  DAFTAR ERROR LENGKAP  [52 jenis, 1163 kejadian total]
+  DAFTAR ERROR LENGKAP  [52 jenis, 1165 kejadian total]
 ────────────────────────────────────────────────────────────────────────
 
 ┌───────────────────────────────────────────────────────────────────────
@@ -728,9 +728,9 @@
 │
 │  DETAIL
 │  Sumber      : unhandledRejection
-│  Frekuensi   : 185x (duplikat digabung)
+│  Frekuensi   : 186x (duplikat digabung)
 │  Pertama     : 20/05/2026, 14.22.34
-│  Terakhir    : 25/05/2026, 03.35.06
+│  Terakhir    : 25/05/2026, 07.13.21
 │
 │  STACK TRACE (3 baris pertama)
 │  ▶  Error: Connection Closed
@@ -746,9 +746,9 @@
 │
 │  DETAIL
 │  Sumber      : console.error
-│  Frekuensi   : 185x (duplikat digabung)
+│  Frekuensi   : 186x (duplikat digabung)
 │  Pertama     : 20/05/2026, 14.22.34
-│  Terakhir    : 25/05/2026, 03.35.06
+│  Terakhir    : 25/05/2026, 07.13.21
 │
 │  STACK TRACE (3 baris pertama)
 │  ▶  Error: [31m[CrashGuard] UnhandledRejection (1 this minute):[39m Connection Closed
@@ -964,6 +964,6 @@ Require stack:
 └───────────────────────────────────────────────────────────────────────
 
 ════════════════════════════════════════════════════════════════════════
-  End of Report  —  Total: 52 jenis, 1163 kejadian
-  Terakhir diperbarui: 25/05/2026, 05.49.51
+  End of Report  —  Total: 52 jenis, 1165 kejadian
+  Terakhir diperbarui: 25/05/2026, 07.13.21
 ════════════════════════════════════════════════════════════════════════

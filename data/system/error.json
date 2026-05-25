@@ -356,18 +356,18 @@
       "source": "unhandledRejection",
       "message": "Connection Closed",
       "stack": "Error: Connection Closed\n    at sendRawMessage (/home/runner/workspace/node_modules/socketon/lib/Socket/socket.js:63:19)\n    at sendNode (/home/runner/workspace/node_modules/socketon/lib/Socket/socket.js:82:16)\n    at /home/runner/workspace/node_modules/socketon/lib/Socket/messages-send.js:592:19\n    at async Object.transaction (/home/runner/workspace/node_modules/socketon/lib/Utils/auth-utils.js:139:26)\n    at async relayMessage (/home/runner/workspace/node_modules/socketon/lib/Socket/messages-send.js:337:9)\n    at async sendPeerDataOperationMessage (/home/runner/workspace/node_modules/socketon/lib/Socket/messages-send.js:264:23)\n    at async sendRetryRequest (/home/runner/workspace/node_modules/socketon/lib/Socket/messages-recv.js:219:27)\n    at async /home/runner/workspace/node_modules/socketon/lib/Socket/messages-recv.js:825:33\n    at async /home/runner/workspace/node_modules/socketon/lib/Utils/make-mutex.js:18:36",
-      "count": 185,
+      "count": 186,
       "firstSeen": "2026-05-20T14:22:34.406Z",
-      "lastSeen": "2026-05-25T03:35:06.968Z"
+      "lastSeen": "2026-05-25T07:13:21.020Z"
     },
     {
       "fingerprint": "console.error::\u001b[Nm[CrashGuard] UnhandledRejection (N this minute):\u001b[Nm Connection Closed",
       "source": "console.error",
       "message": "\u001b[31m[CrashGuard] UnhandledRejection (1 this minute):\u001b[39m Connection Closed",
       "stack": "Error: \u001b[31m[CrashGuard] UnhandledRejection (1 this minute):\u001b[39m Connection Closed\n    at console.error (file:///home/runner/workspace/index.js:366:27)\n    at process.<anonymous> (file:///home/runner/workspace/src/helper/crashGuard.js:131:17)\n    at process.emit (node:events:524:28)\n    at emitUnhandledRejection (node:internal/process/promises:250:13)\n    at throwUnhandledRejectionsMode (node:internal/process/promises:385:19)\n    at processPromiseRejections (node:internal/process/promises:470:17)\n    at process.processTicksAndRejections (node:internal/process/task_queues:96:32)",
-      "count": 185,
+      "count": 186,
       "firstSeen": "2026-05-20T14:22:34.399Z",
-      "lastSeen": "2026-05-25T03:35:06.962Z"
+      "lastSeen": "2026-05-25T07:13:21.007Z"
     },
     {
       "fingerprint": "command:musikai::Generate gagal: Sensitive words detected; usage is prohibited. Please revise the content.",

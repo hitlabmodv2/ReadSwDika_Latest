@@ -10,8 +10,7 @@ const CREDS_BASE_DIR     = path.join(process.cwd(), 'credsjson');
 const PAIRING_TIMEOUT_MS = 3 * 60 * 1000;
 const PREKEY_POLL_MS     = 1_500;
 const PREKEY_MAX_WAIT_MS = 40_000;
-
-const silentLogger = pino({ level: 'silent' });
+const MAX_RECONNECT      = 10;
 
 /**
  * Format pairing code → XXXX-XXXX
@@ -23,53 +22,67 @@ function formatPairingCode(code) {
 }
 
 /**
- * Polling sampai pre-key-*.json muncul di sessionDir.
- * Return jumlah file json ketika sudah lengkap, atau 0 jika timeout.
+ * Polling sampai pre-key-*.json >= 5 file muncul di sessionDir.
  */
 async function waitUntilPrekeys(sessionDir) {
     const deadline = Date.now() + PREKEY_MAX_WAIT_MS;
     while (Date.now() < deadline) {
-        const allJson  = fs.readdirSync(sessionDir).filter(f => f.endsWith('.json'));
-        const prekeys  = allJson.filter(f => f.startsWith('pre-key-'));
-        if (prekeys.length >= 5) return allJson.length;
+        try {
+            const all     = fs.readdirSync(sessionDir).filter(f => f.endsWith('.json'));
+            const prekeys = all.filter(f => f.startsWith('pre-key-'));
+            if (prekeys.length >= 5) return all.length;
+        } catch {}
         await new Promise(r => setTimeout(r, PREKEY_POLL_MS));
     }
-    // timeout — kirim apapun yang ada
-    return fs.readdirSync(sessionDir).filter(f => f.endsWith('.json')).length;
+    try {
+        return fs.readdirSync(sessionDir).filter(f => f.endsWith('.json')).length;
+    } catch { return 0; }
 }
 
 /**
- * Pack semua file .json di sessionDir jadi Buffer tar.gz
+ * Pack semua file .json di sessionDir → Buffer tar.gz
  */
 function packToBuffer(sessionDir) {
     return new Promise((resolve, reject) => {
         const tmpOut = path.join(os.tmpdir(), `cj_${Date.now()}.tar.gz`);
-        const files  = fs.readdirSync(sessionDir).filter(f => f.endsWith('.json'));
-        if (!files.length) return reject(new Error('Tidak ada file session'));
+        let files;
+        try {
+            files = fs.readdirSync(sessionDir).filter(f => f.endsWith('.json'));
+        } catch (e) {
+            return reject(new Error('Gagal baca sessionDir: ' + e.message));
+        }
+        if (!files.length) return reject(new Error('Tidak ada file session JSON'));
 
         execFile('tar', ['-czf', tmpOut, '-C', sessionDir, ...files], err => {
-            if (err) return reject(new Error(`tar gagal: ${err.message}`));
+            if (err) return reject(new Error('tar gagal: ' + err.message));
             try {
                 const buf = fs.readFileSync(tmpOut);
                 try { fs.unlinkSync(tmpOut); } catch {}
                 resolve(buf);
-            } catch (e) {
-                reject(e);
-            }
+            } catch (e) { reject(e); }
         });
     });
 }
 
 /**
- * Buat & jalankan sesi WhatsApp khusus credsjson.
- * Setelah terhubung → tunggu pre-keys generate → pack semua file → kirim → hapus folder.
+ * Tutup socket dengan bersih (tanpa hapus folder)
+ */
+function closeSocket(sock) {
+    try { sock.ev.removeAllListeners(); } catch {}
+    try { if (sock.ws) sock.ws.close(); } catch {}
+}
+
+/**
+ * Buat & jalankan sesi WhatsApp untuk credsjson.
+ * Reconnect otomatis seperti jadibot saat disconnect selama proses pairing.
+ * Folder credsjson/[nomor]/ TIDAK dihapus otomatis — user bisa cek sendiri.
  */
 async function startCredsJsonSession(number, opts = {}) {
     const {
-        onPairingCode = () => {},
-        onConnected   = () => {},
-        onTimeout     = () => {},
-        onError       = () => {},
+        onPairingCode    = () => {},
+        onConnected      = () => {},
+        onTimeout        = () => {},
+        onError          = () => {},
         customPairingCode,
     } = opts;
 
@@ -82,108 +95,138 @@ async function startCredsJsonSession(number, opts = {}) {
         default: makeWASocket,
         fetchLatestBaileysVersion,
         useMultiFileAuthState,
+        DisconnectReason,
     } = require('socketon');
 
-    const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
-    const { version }          = await fetchLatestBaileysVersion();
-
-    const sock = makeWASocket({
-        version,
-        auth             : { creds: state.creds, keys: state.keys },
-        logger           : silentLogger,
-        printQRInTerminal: false,
-        browser          : ['Ubuntu', 'Chrome', '136.0.7103.93'],
-        keepAliveIntervalMs: 30_000,
-        syncFullHistory  : false,
-        getMessage       : async () => undefined,
-    });
-
-    let pairingRequested = false;
+    // State bersama antar reconnect
     let connected        = false;
     let aborted          = false;
+    let pairingDone      = false;   // pairing code sudah dikirim ke nomor tujuan
+    let reconnectCount   = 0;
+    let currentSock      = null;
 
-    function cleanup() {
-        aborted = true;
-        try { sock.ev.removeAllListeners(); } catch {}
-        try { if (sock.ws) sock.ws.close(); } catch {}
-        setTimeout(() => {
-            try { fs.rmSync(sessionDir, { recursive: true, force: true }); } catch {}
-        }, 2000);
-    }
-
+    // Timeout global 3 menit
     const timeoutHandle = setTimeout(async () => {
         if (connected || aborted) return;
-        cleanup();
+        aborted = true;
+        if (currentSock) closeSocket(currentSock);
         try { await onTimeout(); } catch {}
     }, PAIRING_TIMEOUT_MS);
 
-    sock.ev.on('creds.update', async (...args) => {
-        try { await saveCreds(...args); } catch {}
-    });
-
-    sock.ev.on('connection.update', async ({ connection, lastDisconnect }) => {
+    async function spawnSocket() {
         if (aborted) return;
 
-        // ── Request pairing code saat connecting ──
-        if (connection === 'connecting' && !state.creds?.registered && !pairingRequested) {
-            pairingRequested = true;
-            setTimeout(async () => {
-                if (aborted) return;
-                let retries = 3;
-                while (retries-- > 0) {
-                    try {
-                        const code = await sock.requestPairingCode(
-                            number,
-                            customPairingCode ? String(customPairingCode).toUpperCase() : undefined
-                        );
-                        if (aborted) return;
-                        const fmt = formatPairingCode(code);
-                        await onPairingCode(code, fmt);
-                        return;
-                    } catch (e) {
-                        if (retries === 0) {
-                            try { await onError(e); } catch {}
-                        } else {
-                            await new Promise(r => setTimeout(r, 1500));
+        const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
+        const { version }          = await fetchLatestBaileysVersion();
+
+        const sock = makeWASocket({
+            version,
+            auth             : { creds: state.creds, keys: state.keys },
+            logger           : pino({ level: 'silent' }),
+            printQRInTerminal: false,
+            browser          : ['Ubuntu', 'Chrome', '136.0.7103.93'],
+            keepAliveIntervalMs: 30_000,
+            syncFullHistory  : false,
+            getMessage       : async () => undefined,
+        });
+
+        currentSock = sock;
+
+        sock.ev.on('creds.update', async (...args) => {
+            try { await saveCreds(...args); } catch {}
+        });
+
+        sock.ev.on('connection.update', async ({ connection, lastDisconnect }) => {
+            if (aborted) return;
+
+            const reason = lastDisconnect?.error?.output?.statusCode;
+
+            // ── Request pairing code saat pertama connecting ──
+            if (connection === 'connecting' && !state.creds?.registered && !pairingDone) {
+                pairingDone = true;
+                setTimeout(async () => {
+                    if (aborted) return;
+                    let retries = 3;
+                    while (retries-- > 0) {
+                        try {
+                            const code = await sock.requestPairingCode(
+                                number,
+                                customPairingCode ? String(customPairingCode).toUpperCase() : undefined
+                            );
+                            if (aborted) return;
+                            await onPairingCode(code, formatPairingCode(code));
+                            return;
+                        } catch (e) {
+                            if (retries === 0) {
+                                try { await onError(e); } catch {}
+                            } else {
+                                await new Promise(r => setTimeout(r, 1500));
+                            }
                         }
                     }
-                }
-            }, 1500);
-        }
-
-        // ── Berhasil terhubung ──
-        if (connection === 'open' && !connected) {
-            connected = true;
-            clearTimeout(timeoutHandle);
-
-            // Tunggu pre-key files generate, lalu pack semua
-            (async () => {
-                try {
-                    const fileCount = await waitUntilPrekeys(sessionDir);
-                    const buf       = await packToBuffer(sessionDir);
-                    await onConnected(buf, number, fileCount);
-                } catch (e) {
-                    try { await onError(e); } catch {}
-                } finally {
-                    cleanup();
-                }
-            })();
-        }
-
-        // ── Koneksi putus sebelum berhasil ──
-        if (connection === 'close' && !connected && !aborted) {
-            const code = lastDisconnect?.error?.output?.statusCode;
-            if (code === 401 || code === 403) {
-                clearTimeout(timeoutHandle);
-                cleanup();
-                try { await onError(new Error(`Sesi ditolak WhatsApp (${code})`)); } catch {}
+                }, 1500);
             }
-            // kode lain (515, dsb) biarkan — WA sedang proses pairing
-        }
-    });
+
+            // ── Berhasil terhubung ──
+            if (connection === 'open' && !connected) {
+                connected = true;
+                clearTimeout(timeoutHandle);
+                console.log(`[CREDSJSON] ✅ ${number} connected — tunggu pre-keys...`);
+
+                (async () => {
+                    try {
+                        const fileCount = await waitUntilPrekeys(sessionDir);
+                        console.log(`[CREDSJSON] 📦 ${number} — ${fileCount} file, packing...`);
+                        const buf = await packToBuffer(sessionDir);
+                        await onConnected(buf, number, fileCount);
+                    } catch (e) {
+                        try { await onError(e); } catch {}
+                    } finally {
+                        // Tutup socket, FOLDER TIDAK DIHAPUS
+                        closeSocket(sock);
+                    }
+                })();
+
+                return;
+            }
+
+            // ── Koneksi putus ──
+            if (connection === 'close' && !connected && !aborted) {
+
+                // Fatal: logout paksa atau forbidden
+                if (reason === DisconnectReason.loggedOut || reason === 401 || reason === 403) {
+                    clearTimeout(timeoutHandle);
+                    aborted = true;
+                    closeSocket(sock);
+                    try { await onError(new Error(`Sesi ditolak WhatsApp (${reason})`)); } catch {}
+                    return;
+                }
+
+                // Non-fatal (515 restart required, 428, dsb) → reconnect seperti jadibot
+                if (reconnectCount >= MAX_RECONNECT) {
+                    clearTimeout(timeoutHandle);
+                    aborted = true;
+                    closeSocket(sock);
+                    try { await onError(new Error(`Gagal terhubung setelah ${MAX_RECONNECT}x reconnect`)); } catch {}
+                    return;
+                }
+
+                reconnectCount++;
+                console.log(`[CREDSJSON] 🔄 ${number} reconnect ${reconnectCount}/${MAX_RECONNECT} (code ${reason})...`);
+                closeSocket(sock);
+                setTimeout(() => spawnSocket(), 2000);
+            }
+        });
+    }
+
+    await spawnSocket();
 
     return {
-        abort() { clearTimeout(timeoutHandle); cleanup(); },
+        abort() {
+            aborted = true;
+            clearTimeout(timeoutHandle);
+            if (currentSock) closeSocket(currentSock);
+        },
     };
 }
 
@@ -198,8 +241,17 @@ function cleanNomor(nomor) {
     return n;
 }
 
+/**
+ * Hapus folder sesi credsjson/[nomor]/ secara manual
+ */
+function deleteCredsFolder(number) {
+    const dir = path.join(CREDS_BASE_DIR, cleanNomor(number));
+    try { fs.rmSync(dir, { recursive: true, force: true }); return true; } catch { return false; }
+}
+
 module.exports = {
     startCredsJsonSession,
     cleanNomor,
     formatPairingCode,
+    deleteCredsFolder,
 };

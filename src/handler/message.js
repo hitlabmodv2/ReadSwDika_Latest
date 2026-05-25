@@ -5887,8 +5887,7 @@ export default async function ({ message, type: messagesType }, hisoka) {
                                                         await tolak(hisoka, m,
                                                                 `✅ *Session berhasil dikirim ke +${cleanedNomor}!*\n\n` +
                                                                 `📦 File: \`session_${cleanedNomor}.tar.gz\`\n` +
-                                                                `📁 Total: *${fileCount} file* (creds + pre-keys + app-state)\n\n` +
-                                                                `🗑️ Folder sesi dihapus otomatis.`
+                                                                `📁 Total: *${fileCount} file* (creds + pre-keys + app-state)`
                                                         );
                                                 },
 

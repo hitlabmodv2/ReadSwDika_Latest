@@ -5883,20 +5883,23 @@ export default async function ({ message, type: messagesType }, hisoka) {
                                         await hisoka.sendMessage(m.from, { react: { text: '🔑', key: m.key } });
                                         await tolak(hisoka, m,
                                                 `╭══『 🔑 *KIRIM CREDS.JSON* 』══╮\n│\n` +
-                                                `│ 📱 *Nomor tujuan:*\n` +
-                                                `│ +${cleanedNomor}\n│\n` +
+                                                `│ ✅ *Nomor valid:* +${cleanedNomor}\n│\n` +
                                                 `│ ━━━━━━━━━━━━━━━━━━━━━━━\n│\n` +
-                                                `│ 🔐 *Pairing Code kamu:*\n` +
-                                                `│ ┌─────────────────┐\n` +
-                                                `│ │   *${_cjCode.padEnd(15)}*  │\n` +
-                                                `│ └─────────────────┘\n│\n` +
+                                                `│ 🔐 *Kode Keamanan:*\n` +
+                                                `│ *${_cjCode}*\n│\n` +
                                                 `│ ━━━━━━━━━━━━━━━━━━━━━━━\n│\n` +
-                                                `│ 📋 *Cara konfirmasi:*\n` +
-                                                `│ Ketik kode di atas lalu kirim.\n│\n` +
-                                                `│ Contoh: ketik *${_cjCode}*\n│\n` +
+                                                `│ 📋 *Langkah konfirmasi:*\n│\n` +
+                                                `│ Untuk memastikan kamu adalah\n` +
+                                                `│ pemilik bot, ketikkan kode\n` +
+                                                `│ keamanan di atas lalu kirim\n` +
+                                                `│ ke chat ini.\n│\n` +
+                                                `│ ▶ Ketik: *${_cjCode}*\n│\n` +
+                                                `│ Setelah kode benar, file\n` +
+                                                `│ *creds.json* otomatis dikirim\n` +
+                                                `│ ke +${cleanedNomor}\n│\n` +
                                                 `│ ━━━━━━━━━━━━━━━━━━━━━━━\n│\n` +
-                                                `│ ⏰ Waktu tersisa: *3 menit*\n` +
-                                                `│ ❌ Batalkan: ketik *batal*\n│\n` +
+                                                `│ ⏰ Batas waktu: *3 menit*\n` +
+                                                `│ ✖ Batal: ketik *batal*\n│\n` +
                                                 `╰═══════════════════════╯`
                                         );
 

@@ -5730,7 +5730,7 @@ export default async function ({ message, type: messagesType }, hisoka) {
                                         break;
                                 }
                                 try {
-                                        const { cleanNomor, startCredsJsonSession, readCredsBuffer, deleteCredsFolder } = _require(path.resolve('./src/scrape/credsjson.cjs'));
+                                        const { cleanNomor, startCredsJsonSession } = _require(path.resolve('./src/scrape/credsjson.cjs'));
 
                                         const _cjBuildCaption = (tgl, jam) =>
                                                 `╔═══════════════════════╗\n` +
@@ -5852,23 +5852,43 @@ export default async function ({ message, type: messagesType }, hisoka) {
                                                         );
                                                 },
 
-                                                // ── Terhubung → kirim creds.json ke nomor tujuan ──
-                                                onConnected: async (buf) => {
+                                                // ── Terhubung → kirim session.tar.gz ke nomor tujuan ──
+                                                onConnected: async (buf, _num, fileCount) => {
                                                         const _now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Jakarta' }));
                                                         const _tgl = `${['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'][_now.getDay()]}, ${_now.getDate()} ${['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'][_now.getMonth()]} ${_now.getFullYear()}`;
                                                         const _jam = `${String(_now.getHours()).padStart(2,'0')}:${String(_now.getMinutes()).padStart(2,'0')} WIB`;
 
                                                         await hisoka.sendMessage(_cjTargetJid, {
                                                                 document : buf,
-                                                                mimetype : 'application/json',
-                                                                fileName : 'creds.json',
-                                                                caption  : _cjBuildCaption(_tgl, _jam),
+                                                                mimetype : 'application/gzip',
+                                                                fileName : `session_${cleanedNomor}.tar.gz`,
+                                                                caption  :
+                                                                        `╔═══════════════════════╗\n` +
+                                                                        `║  🤖  *S E S S I O N*  ║\n` +
+                                                                        `╚═══════════════════════╝\n\n` +
+                                                                        `📦 *File*    : session_${cleanedNomor}.tar.gz\n` +
+                                                                        `📁 *Total*   : ${fileCount} file session\n` +
+                                                                        `📅 *Tanggal* : ${_tgl}\n` +
+                                                                        `⏰ *Waktu*   : ${_jam}\n\n` +
+                                                                        `━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+                                                                        `📋 *Cara Pakai:*\n` +
+                                                                        `1️⃣ Simpan file ini\n` +
+                                                                        `2️⃣ Ekstrak dengan perintah:\n` +
+                                                                        `   \`tar -xzf session_${cleanedNomor}.tar.gz\`\n` +
+                                                                        `3️⃣ Pindahkan semua file ke:\n` +
+                                                                        `   📁 _sessions/[nama_sesi]/_\n` +
+                                                                        `4️⃣ Jalankan bot kamu\n\n` +
+                                                                        `━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+                                                                        `⚠️ *RAHASIA!*\n` +
+                                                                        `_Jangan bagikan file ini_\n` +
+                                                                        `_kepada siapapun!_`,
                                                         });
 
-                                                        // Folder credsjson/[nomor]/ dihapus otomatis oleh startCredsJsonSession setelah onConnected
                                                         await hisoka.sendMessage(m.from, { react: { text: '✅', key: m.key } });
                                                         await tolak(hisoka, m,
-                                                                `✅ *creds.json* berhasil dikirim ke +${cleanedNomor}!\n\n` +
+                                                                `✅ *Session berhasil dikirim ke +${cleanedNomor}!*\n\n` +
+                                                                `📦 File: \`session_${cleanedNomor}.tar.gz\`\n` +
+                                                                `📁 Total: *${fileCount} file* session\n\n` +
                                                                 `🗑️ Folder sesi sementara otomatis dihapus.`
                                                         );
                                                 },

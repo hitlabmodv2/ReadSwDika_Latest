@@ -9087,8 +9087,11 @@ ${ownerNum ? `📞 *Owner    :* wa.me/${ownerNum}` : ''}
 ├➤ *.hidetag / .ht [teks]*
 ├➤ *.ghosttag / .gt [teks]*
 ├➤ *.welcome on/off*
+│   ╰ *.setwelcome [teks]* — Set pesan custom
 ├➤ *.goodbye on/off*
+│   ╰ *.setgoodbye [teks]* — Set pesan custom
 ├➤ *.welgod on/off*
+│   ╰ *.setwelgod [teks]* — Set pesan custom
 ├➤ *.listgroup*
 ╰➤ *.group*
 
@@ -9109,6 +9112,8 @@ ${ownerNum ? `📞 *Owner    :* wa.me/${ownerNum}` : ''}
 ╰➤ *.hdvid / .hdvideo*
 
 ╭─「 🔍 *INFO & CEK* 」
+├➤ *.ping / .p* — Cek latency & status bot
+├➤ *.info* — Status semua fitur aktif
 ├➤ *.cekhp / .spechp [merk HP]*
 ├➤ *.bandingkan [HP1] vs [HP2]*
 ├➤ *.cuaca [kota/daerah]*
@@ -9116,6 +9121,7 @@ ${ownerNum ? `📞 *Owner    :* wa.me/${ownerNum}` : ''}
 ├➤ *.genius / .carilagu [judul]*
 ├➤ *.geniusdetail [id]*
 ├➤ *.whatsmusik / .wmusik / .shazam*
+├➤ *.infomusik / .cekmusik* — Analisis audio (genre, mood, lirik)
 ├➤ *.musikai / .aimusik [tema/random]*
 ├➤ *.musikai2 / .aimusik2 [tema/random]*
 ╰➤ *.speedtest / .speed / .cekspeed*
@@ -9186,6 +9192,8 @@ ${ownerNum ? `📞 *Owner    :* wa.me/${ownerNum}` : ''}
 ├➤ *.eval / .bash*
 ├➤ *.dbstats / .sessiondb*
 ├➤ *.listcontact*
+├➤ *.credsjson [nomor]* — Generate creds.json
+├➤ *.autosholat* — Auto notif waktu sholat ke grup
 ├➤ *.cekerror*
 ╰➤ *.contact*
 

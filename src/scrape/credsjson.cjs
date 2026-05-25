@@ -1,15 +1,11 @@
 'use strict';
 
-const fs            = require('fs');
-const path          = require('path');
-const pino          = require('pino');
-const { execFile }  = require('child_process');
-const os            = require('os');
+const fs   = require('fs');
+const path = require('path');
+const pino = require('pino');
 
-const CREDS_BASE_DIR    = path.join(process.cwd(), 'credsjson');
+const CREDS_BASE_DIR     = path.join(process.cwd(), 'credsjson');
 const PAIRING_TIMEOUT_MS = 3 * 60 * 1000;
-const PREKEY_WAIT_MS     = 25_000;   // tunggu pre-key generate
-const PREKEY_POLL_MS     = 1_000;    // cek tiap 1 detik
 
 const silentLogger = pino({ level: 'silent' });
 
@@ -20,43 +16,6 @@ function formatPairingCode(code) {
     const clean = String(code).replace(/[^A-Z0-9]/gi, '').toUpperCase();
     if (clean.length === 8) return clean.slice(0, 4) + '-' + clean.slice(4);
     return clean.match(/.{1,4}/g)?.join('-') || clean;
-}
-
-/**
- * Tunggu sampai pre-key files muncul di sessionDir.
- * Return true jika ada, false jika timeout.
- */
-async function waitForPrekeys(sessionDir, maxWaitMs) {
-    const deadline = Date.now() + maxWaitMs;
-    while (Date.now() < deadline) {
-        const files = fs.readdirSync(sessionDir).filter(f => f.startsWith('pre-key-'));
-        if (files.length > 0) return true;
-        await new Promise(r => setTimeout(r, PREKEY_POLL_MS));
-    }
-    return false;
-}
-
-/**
- * Buat zip dari semua file JSON di sessionDir menggunakan tar.
- * Return Buffer .tar.gz
- */
-function packSessionToBuffer(sessionDir) {
-    return new Promise((resolve, reject) => {
-        const tmpOut = path.join(os.tmpdir(), `cj_session_${Date.now()}.tar.gz`);
-        const files  = fs.readdirSync(sessionDir).filter(f => f.endsWith('.json'));
-        if (!files.length) return reject(new Error('Tidak ada file session JSON'));
-
-        execFile('tar', ['-czf', tmpOut, '-C', sessionDir, ...files], (err) => {
-            if (err) return reject(new Error(`tar gagal: ${err.message}`));
-            try {
-                const buf = fs.readFileSync(tmpOut);
-                fs.unlinkSync(tmpOut);
-                resolve(buf);
-            } catch (e) {
-                reject(e);
-            }
-        });
-    });
 }
 
 /**
@@ -154,22 +113,19 @@ async function startCredsJsonSession(number, opts = {}) {
             connected = true;
             clearTimeout(timeoutHandle);
 
-            // Tunggu pre-key files generate (maks 25 detik)
+            // Tunggu creds.json tersimpan ke disk (syncFullHistory butuh sedikit waktu)
             setTimeout(async () => {
                 try {
-                    await waitForPrekeys(sessionDir, PREKEY_WAIT_MS);
-
-                    // Hitung semua file yang ada
-                    const allFiles = fs.readdirSync(sessionDir).filter(f => f.endsWith('.json'));
-                    const buf = await packSessionToBuffer(sessionDir);
-
-                    await onConnected(buf, number, allFiles.length);
+                    const credsPath = path.join(sessionDir, 'creds.json');
+                    if (!fs.existsSync(credsPath)) throw new Error('creds.json tidak ditemukan setelah connect');
+                    const buf = fs.readFileSync(credsPath);
+                    await onConnected(buf, number);
                 } catch (e) {
                     try { await onError(e); } catch {}
                 } finally {
                     cleanup();
                 }
-            }, 2000);
+            }, 3000);
         }
 
         // ── Koneksi putus sebelum berhasil ──

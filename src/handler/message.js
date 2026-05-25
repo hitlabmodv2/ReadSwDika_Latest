@@ -5877,12 +5877,17 @@ export default async function ({ message, type: messagesType }, hisoka) {
                                                 timeout  : _cjTimeout,
                                         });
 
+                                        const _cjCfg = _require(path.resolve('./config.json'));
+                                        const _cjCode = (_cjCfg.pairingCode && String(_cjCfg.pairingCode).trim()) || '—';
+
                                         await hisoka.sendMessage(m.from, { react: { text: '🔑', key: m.key } });
                                         await tolak(hisoka, m,
                                                 `╭══『 🔑 *VERIFIKASI* 』══╮\n│\n` +
                                                 `│ ✅ Nomor valid: *+${cleanedNomor}*\n│\n` +
-                                                `│ Masukkan *pairing code* dalam\n` +
-                                                `│ *3 menit* untuk konfirmasi.\n│\n` +
+                                                `│ Pairing code kamu:\n` +
+                                                `│ 🔐 *${_cjCode}*\n│\n` +
+                                                `│ Ketik kode di atas untuk konfirmasi\n` +
+                                                `│ pengiriman *creds.json*.\n│\n` +
                                                 `│ ⏰ Batas waktu: 3 menit\n` +
                                                 `│ ❌ Ketik *batal* untuk membatalkan\n│\n` +
                                                 `╰═══════════════════════╯`

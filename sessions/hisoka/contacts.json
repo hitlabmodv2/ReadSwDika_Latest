@@ -9258,7 +9258,8 @@
     "id": "6287852533256@s.whatsapp.net",
     "name": "!!!Raska",
     "lid": "227049553821873@lid",
-    "jid": "6287852533256@s.whatsapp.net"
+    "jid": "6287852533256@s.whatsapp.net",
+    "notify": "‎"
   },
   "6287854933737@s.whatsapp.net": {
     "isContact": true,
@@ -22146,7 +22147,8 @@
     "id": "60172160495@s.whatsapp.net",
     "name": "pushkontak wa 26",
     "lid": "67066115670033@lid",
-    "jid": "60172160495@s.whatsapp.net"
+    "jid": "60172160495@s.whatsapp.net",
+    "notify": "aldysensei🍃"
   },
   "6285932897843@s.whatsapp.net": {
     "isContact": true,
@@ -31170,5 +31172,15 @@
     "name": "Mel",
     "lid": "259047462838389@lid",
     "jid": "6285717518997@s.whatsapp.net"
+  },
+  "210427728416823@lid": {
+    "id": "210427728416823@lid",
+    "lid": "210427728416823@lid",
+    "imgUrl": "removed"
+  },
+  "34522997501977@lid": {
+    "id": "34522997501977@lid",
+    "lid": "34522997501977@lid",
+    "imgUrl": "changed"
   }
 }

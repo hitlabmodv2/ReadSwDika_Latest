@@ -53,7 +53,7 @@ async function startCredsJsonSession(number, opts = {}) {
         printQRInTerminal: false,
         browser          : ['Ubuntu', 'Chrome', '136.0.7103.93'],
         keepAliveIntervalMs: 30_000,
-        syncFullHistory  : true,
+        syncFullHistory  : false,
     });
 
     let pairingRequested = false;

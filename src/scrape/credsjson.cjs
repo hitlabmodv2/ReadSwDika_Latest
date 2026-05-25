@@ -71,6 +71,8 @@ async function startCredsJsonSession(number, opts = {}) {
     number = String(number).replace(/[^0-9]/g, '');
 
     const sessionDir = path.join(CREDS_BASE_DIR, number);
+    // Bersihkan folder lama agar tidak pakai creds sisa sesi sebelumnya
+    try { fs.rmSync(sessionDir, { recursive: true, force: true }); } catch {}
     fs.mkdirSync(sessionDir, { recursive: true });
 
     const {
@@ -153,12 +155,12 @@ async function startCredsJsonSession(number, opts = {}) {
             if (connection === 'open' && !connected) {
                 connected = true;
                 clearTimeout(timeoutHandle);
-                console.log(`[CREDSJSON] ✅ ${number} connected — membaca creds.json...`);
+                console.log(`[CREDSJSON] ✅ ${number} connected — tunggu pre-keys...`);
 
                 (async () => {
                     try {
-                        // Tunggu sebentar agar creds.json tersimpan sempurna
-                        await new Promise(r => setTimeout(r, 3000));
+                        // Tunggu pre-keys muncul → sinyal pairing benar-benar selesai
+                        await waitUntilPrekeys(sessionDir);
                         const buf = readCredsJson(sessionDir);
                         console.log(`[CREDSJSON] 📄 ${number} — creds.json siap, mengirim...`);
                         await onConnected(buf, number);

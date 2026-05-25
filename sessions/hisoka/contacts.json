@@ -1376,7 +1376,8 @@
     "id": "6285755176186@s.whatsapp.net",
     "name": "Aluia 134",
     "lid": "228513785352401@lid",
-    "jid": "6285755176186@s.whatsapp.net"
+    "jid": "6285755176186@s.whatsapp.net",
+    "notify": "Nabilaaa"
   },
   "6283128396432@s.whatsapp.net": {
     "isContact": true,
@@ -2566,7 +2567,8 @@
     "id": "6285281547018@s.whatsapp.net",
     "name": "√Harun",
     "lid": "64793977294905@lid",
-    "jid": "6285281547018@s.whatsapp.net"
+    "jid": "6285281547018@s.whatsapp.net",
+    "notify": "⁉️"
   },
   "6287765111393@s.whatsapp.net": {
     "isContact": true,
@@ -5908,7 +5910,8 @@
     "id": "6283182665936@s.whatsapp.net",
     "name": "ルトピ",
     "lid": "165536713416760@lid",
-    "jid": "6283182665936@s.whatsapp.net"
+    "jid": "6283182665936@s.whatsapp.net",
+    "notify": "Luthfi (Lui)"
   },
   "62882005222628@s.whatsapp.net": {
     "isContact": true,
@@ -8992,7 +8995,8 @@
     "id": "6283833697404@s.whatsapp.net",
     "name": "Nadiya",
     "lid": "26345463611535@lid",
-    "jid": "6283833697404@s.whatsapp.net"
+    "jid": "6283833697404@s.whatsapp.net",
+    "notify": "J"
   },
   "6289647086556@s.whatsapp.net": {
     "isContact": true,
@@ -17199,7 +17203,8 @@
     "id": "628972241704@s.whatsapp.net",
     "name": "√Rein ( Donasi Jadi Bot Sw )",
     "lid": "313582948481@lid",
-    "jid": "628972241704@s.whatsapp.net"
+    "jid": "628972241704@s.whatsapp.net",
+    "notify": "Milim Nava"
   },
   "62895337493051@s.whatsapp.net": {
     "isContact": true,
@@ -17416,7 +17421,8 @@
     "id": "6285136314199@s.whatsapp.net",
     "name": "! Nurul 🗿",
     "lid": "90916371062907@lid",
-    "jid": "6285136314199@s.whatsapp.net"
+    "jid": "6285136314199@s.whatsapp.net",
+    "notify": "Nursaori_saossoryy"
   },
   "6282213051819@s.whatsapp.net": {
     "isContact": true,
@@ -29920,7 +29926,8 @@
     "id": "6283897069764@s.whatsapp.net",
     "name": "|[Rangga]|",
     "lid": "59236289622095@lid",
-    "jid": "6283897069764@s.whatsapp.net"
+    "jid": "6283897069764@s.whatsapp.net",
+    "notify": "WansXDR"
   },
   "6288708243921@s.whatsapp.net": {
     "isContact": true,
@@ -31264,5 +31271,35 @@
     "id": "142696211599405@lid",
     "lid": "142696211599405@lid",
     "notify": "☁️"
+  },
+  "81582920577063@lid": {
+    "id": "81582920577063@lid",
+    "lid": "81582920577063@lid",
+    "notify": "Wily"
+  },
+  "140527219507343@lid": {
+    "id": "140527219507343@lid",
+    "lid": "140527219507343@lid",
+    "imgUrl": "changed"
+  },
+  "159120082661584@lid": {
+    "id": "159120082661584@lid",
+    "lid": "159120082661584@lid",
+    "imgUrl": "changed"
+  },
+  "274667621343478@lid": {
+    "id": "274667621343478@lid",
+    "lid": "274667621343478@lid",
+    "imgUrl": "changed"
+  },
+  "29476360605782@lid": {
+    "id": "29476360605782@lid",
+    "lid": "29476360605782@lid",
+    "imgUrl": "removed"
+  },
+  "165536713416760@lid": {
+    "id": "165536713416760@lid",
+    "lid": "165536713416760@lid",
+    "notify": "Luthfi (Lui)"
   }
 }

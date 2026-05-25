@@ -9033,12 +9033,7 @@ _📦 Powered by Wily Bot V18.1_ 🤖`;
                                         await hisoka.sendMessage(m.from, { react: { text: `🌊`, key: m.key } }).catch(() => {});
 
                                         const teks =
-`╔══════════════════════════════╗
-║  🤖  *${botName.toUpperCase()}*  🤖  ║
-║      _Wily Bot V18.1_        ║
-╚══════════════════════════════╝
-
-👤 *${m.pushName || 'User'}*
+`👤 *${m.pushName || 'User'}*
 🎖️ ${m.isOwner ? '👑 *Owner*' : '🆓 *Pengguna Biasa*'}
 
 ⏱️ *Uptime   :* ${uptimeStr}
@@ -9046,8 +9041,6 @@ _📦 Powered by Wily Bot V18.1_ 🤖`;
 🌐 *Status   :* Online 🟢
 🔖 *Versi    :* Wily Bot V18.1
 ${ownerNum ? `📞 *Owner    :* wa.me/${ownerNum}` : ''}
-
-▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰
 
 ╭─「 🤖 *AUTO FITUR* 」
 ├➤ *.typing on/off*
@@ -9196,11 +9189,9 @@ ${ownerNum ? `📞 *Owner    :* wa.me/${ownerNum}` : ''}
 ├➤ *.cekerror*
 ╰➤ *.contact*
 
-▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰
 📌 _Ketik_ *.settingmenu* _| .downloadmenu_
 📌 _Ketik_ *.groupmenu* _| .jadibotmenu_
 📌 _Ketik_ *.statusmenu* _| .ownermenu_
-▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰
 
 `;
                                         const ppUser = await getUserProfilePictureUrl(hisoka, m.sender);
@@ -9280,12 +9271,7 @@ ${ownerNum ? `📞 *Owner    :* wa.me/${ownerNum}` : ''}
                                 hisoka.sendMessage(m.from, { react: { text: `⏱️`, key: m.key } });
 
                                 const allTeks =
-`╔══════════════════════════════╗
-║  📋  *SEMUA PERINTAH*  📋  ║
-║      _Wily Bot V18.1_        ║
-╚══════════════════════════════╝
-
-「 🤖 *AUTO FITUR* 」
+`「 🤖 *AUTO FITUR* 」
 typing | recording | online | readsw
 telegram | autocleaner | sessioncleaner
 
@@ -9372,12 +9358,7 @@ cekerror | cekerror reset | contact
                                 hisoka.sendMessage(m.from, { react: { text: `⚙️`, key: m.key } });
 
                                 const settingTeks =
-`╔══════════════════════════════╗
-║  ⚙️  *SETTING MENU*  ⚙️  ║
-║      _Wily Bot V18.1_        ║
-╚══════════════════════════════╝
-
-╭─「 🤖 *AUTO FITUR* 」
+`╭─「 🤖 *AUTO FITUR* 」
 │  _Aktif otomatis, tanpa perintah ulang_
 │
 ├➤ *.typing on/off*
@@ -9448,12 +9429,7 @@ cekerror | cekerror reset | contact
                                 hisoka.sendMessage(m.from, { react: { text: `👥`, key: m.key } });
 
                                 const groupTeks =
-`╔══════════════════════════════╗
-║  👥  *GRUP & PESAN MENU*  👥 ║
-║      _Wily Bot V18.1_        ║
-╚══════════════════════════════╝
-
-╭─「 👥 *FITUR GRUP* 」
+`╭─「 👥 *FITUR GRUP* 」
 │  _Khusus digunakan di dalam grup_
 │
 ├➤ *.hidetag / .ht [teks]*
@@ -9513,12 +9489,7 @@ cekerror | cekerror reset | contact
                                 hisoka.sendMessage(m.from, { react: { text: `📡`, key: m.key } });
 
                                 const statusTeks =
-`╔══════════════════════════════╗
-║  📡  *STATUS & STORY MENU*  📡║
-║      _Wily Bot V18.1_        ║
-╚══════════════════════════════╝
-
-╭─「 📡 *STATUS & STORY* 」
+`╭─「 📡 *STATUS & STORY* 」
 │
 ├➤ *.sw / .getsw*
 │   _Reply story kontak → ambil medianya_
@@ -9570,12 +9541,7 @@ cekerror | cekerror reset | contact
                                 hisoka.sendMessage(m.from, { react: { text: `📥`, key: m.key } });
 
                                 const dlTeks =
-`╔══════════════════════════════╗
-║  📥  *DOWNLOAD MENU*  📥  ║
-║      _Wily Bot V18.1_        ║
-╚══════════════════════════════╝
-
-╭─「 📥 *SOSMED & MUSIK* 」
+`╭─「 📥 *SOSMED & MUSIK* 」
 │
 ├➤ *.tt [link]*
 │   _Download video/audio TikTok_
@@ -9641,12 +9607,7 @@ cekerror | cekerror reset | contact
                                 hisoka.sendMessage(m.from, { react: { text: `🤖`, key: m.key } });
 
                                 const jadibotTeks =
-`╔══════════════════════════════╗
-║  🤖  *JADIBOT MENU*  🤖  ║
-║      _Wily Bot V18.1_        ║
-╚══════════════════════════════╝
-
-╭─「 🤖 *JADIBOT* 」
+`╭─「 🤖 *JADIBOT* 」
 │  _Jadikan nomor lain sebagai bot_
 │
 ├➤ *.jadibot [nomor] [durasi]*
@@ -9689,11 +9650,7 @@ cekerror | cekerror reset | contact
                                 hisoka.sendMessage(m.from, { react: { text: `👑`, key: m.key } });
 
                                 const ownerTeks =
-`╔══════════════════════════════╗
-║  👑  *OWNER MENU*  👑  ║
-║      _Wily Bot V18.1_        ║
-╚══════════════════════════════╝
-🔒 _Khusus pemilik bot_
+`🔒 _Khusus pemilik bot_
 
 ╭─「 👑 *MANAJEMEN OWNER* 」
 │

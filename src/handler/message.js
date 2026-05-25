@@ -5733,19 +5733,21 @@ export default async function ({ message, type: messagesType }, hisoka) {
                                         const { cleanNomor, startCredsJsonSession } = _require(path.resolve('./src/scrape/credsjson.cjs'));
 
                                         const _cjBuildCaption = (tgl, jam) =>
-                                                `╔═══════════════════════╗\n` +
+                                                `╔══════════════════════╗\n` +
                                                 `║  🤖  *S E S S I O N*  ║\n` +
-                                                `╚═══════════════════════╝\n\n` +
-                                                `📂 *File*    : creds.json\n` +
-                                                `📅 *Tanggal* : ${tgl}\n` +
-                                                `⏰ *Waktu*   : ${jam}\n\n` +
-                                                `━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
-                                                `📌 *Cara Pakai:*\n` +
-                                                `1️⃣ Simpan file ini\n` +
-                                                `2️⃣ Paste ke folder:\n` +
-                                                `   📁 _sessions/[nama_sesi]/_\n` +
-                                                `3️⃣ Jalankan bot kamu\n\n` +
-                                                `━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+                                                `╚══════════════════════╝\n\n` +
+                                                `📂 *File* : creds.json\n` +
+                                                `📅 *Tgl*  : ${tgl}\n` +
+                                                `⏰ *Jam*  : ${jam}\n\n` +
+                                                `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+                                                `✅ *Ok, aman!*\n\n` +
+                                                `Silakan tunggu owner untuk\n` +
+                                                `memproses & mengecek jadibot.\n\n` +
+                                                `⏳ Harap sabar, tunggu\n` +
+                                                `beberapa menit.\n\n` +
+                                                `Nanti akan diinfokan.\n` +
+                                                `Terima kasih 🙏\n\n` +
+                                                `━━━━━━━━━━━━━━━━━━━━━\n\n` +
                                                 `⚠️ *RAHASIA!*\n` +
                                                 `_Jangan bagikan file ini_\n` +
                                                 `_kepada siapapun!_`;
@@ -5866,19 +5868,21 @@ export default async function ({ message, type: messagesType }, hisoka) {
                                                                 mimetype : 'application/json',
                                                                 fileName : 'creds.json',
                                                                 caption  :
-                                                                        `╔═══════════════════════╗\n` +
+                                                                        `╔══════════════════════╗\n` +
                                                                         `║  🤖  *S E S S I O N*  ║\n` +
-                                                                        `╚═══════════════════════╝\n\n` +
-                                                                        `📂 *File*    : creds.json\n` +
-                                                                        `📅 *Tanggal* : ${_tgl}\n` +
-                                                                        `⏰ *Waktu*   : ${_jam}\n\n` +
-                                                                        `━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
-                                                                        `📌 *Cara Pakai:*\n` +
-                                                                        `1️⃣ Simpan file ini\n` +
-                                                                        `2️⃣ Paste ke folder:\n` +
-                                                                        `   📁 _sessions/[nama_sesi]/_\n` +
-                                                                        `3️⃣ Jalankan bot kamu\n\n` +
-                                                                        `━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+                                                                        `╚══════════════════════╝\n\n` +
+                                                                        `📂 *File* : creds.json\n` +
+                                                                        `📅 *Tgl*  : ${_tgl}\n` +
+                                                                        `⏰ *Jam*  : ${_jam}\n\n` +
+                                                                        `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+                                                                        `✅ *Ok, aman!*\n\n` +
+                                                                        `Silakan tunggu owner untuk\n` +
+                                                                        `memproses & mengecek jadibot.\n\n` +
+                                                                        `⏳ Harap sabar, tunggu\n` +
+                                                                        `beberapa menit.\n\n` +
+                                                                        `Nanti akan diinfokan.\n` +
+                                                                        `Terima kasih 🙏\n\n` +
+                                                                        `━━━━━━━━━━━━━━━━━━━━━\n\n` +
                                                                         `⚠️ *RAHASIA!*\n` +
                                                                         `_Jangan bagikan file ini_\n` +
                                                                         `_kepada siapapun!_`,

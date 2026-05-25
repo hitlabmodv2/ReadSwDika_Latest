@@ -704,7 +704,7 @@ const pendingAlqDlChoices = new Map();
 const pendingAlqUpdateChoices = new Map();
 const pendingCosplayChoices = new Map();
 const pendingKomikChoices = new Map();
-const pendingCredsJson    = new Map(); // sender → { nomor, expiresAt, timeout }
+
 const aiReplyCooldown = new Map(); // sender → last reply timestamp
 const AI_COOLDOWN_MS = 3000; // 3 detik cooldown per user
 
@@ -2787,101 +2787,7 @@ export default async function ({ message, type: messagesType }, hisoka) {
                         }
                 }
 
-                // ── Handle pending credsjson pairing code (Step 2) ──
-                if (pendingCredsJson.has(m.sender) && !m.prefix) {
-                        const _cjPend = pendingCredsJson.get(m.sender);
-                        const _cjText = String(m.text || '').trim();
-
-                        if (!_cjText) {
-                                // pesan kosong, abaikan
-                        } else if (/^(batal|cancel)$/i.test(_cjText)) {
-                                if (_cjPend.timeout) clearTimeout(_cjPend.timeout);
-                                pendingCredsJson.delete(m.sender);
-                                await hisoka.sendMessage(m.from, { react: { text: '✅', key: m.key } });
-                                await tolak(hisoka, m, '✅ Dibatalkan. Creds tidak dikirim.');
-                                return;
-                        } else if (_cjPend.expiresAt <= Date.now()) {
-                                if (_cjPend.timeout) clearTimeout(_cjPend.timeout);
-                                pendingCredsJson.delete(m.sender);
-                                await hisoka.sendMessage(m.from, { react: { text: '⏳', key: m.key } });
-                                await tolak(hisoka, m, '⏳ Waktu habis. Ulangi perintah `.credsjson [nomor]`.');
-                                return;
-                        } else {
-                                const _cjCfgNow = _require(path.resolve('./config.json'));
-                                if (_cjText !== _cjCfgNow.pairingCode) {
-                                        await hisoka.sendMessage(m.from, { react: { text: '❌', key: m.key } });
-                                        await tolak(hisoka, m, `❌ *Pairing code salah!*\nMasukkan kode yang benar dari config.`);
-                                        return;
-                                }
-
-                                // ✅ Code benar → lanjut kirim creds.json
-                                if (_cjPend.timeout) clearTimeout(_cjPend.timeout);
-                                pendingCredsJson.delete(m.sender);
-
-                                try {
-                                        const { stageCreds, readStagedBuffer, deleteStagingFolder } = _require(path.resolve('./src/scrape/credsjson.cjs'));
-
-                                        const _cjNomor     = _cjPend.nomor;
-                                        const _cjStageKey  = _cjPend.stageKey;   // "botNomor_targetNomor" — unik, no conflict
-                                        const _cjSessDir   = _cjPend.sessDir;    // jadibot/[num] atau sessions/hisoka
-                                        const _cjTargetJid = _cjNomor + '@s.whatsapp.net';
-
-                                        // 1. Copy creds.json ke staging folder yang terisolasi
-                                        stageCreds(_cjStageKey, _cjSessDir);
-                                        // 2. Baca sebagai Buffer (sebelum dikirim)
-                                        const _cjBuf = readStagedBuffer(_cjStageKey);
-
-                                        await hisoka.sendMessage(m.from, { react: { text: '📤', key: m.key } });
-                                        await tolak(hisoka, m, `📤 Mengirim *creds.json* ke +${_cjNomor}...\nMohon tunggu sebentar.`);
-
-                                        const _cjNow2  = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Jakarta' }));
-                                        const _cjHari2 = ['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'][_cjNow2.getDay()];
-                                        const _cjBln2  = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'][_cjNow2.getMonth()];
-                                        const _cjTgl2  = `${_cjHari2}, ${_cjNow2.getDate()} ${_cjBln2} ${_cjNow2.getFullYear()}`;
-                                        const _cjJam2  = `${String(_cjNow2.getHours()).padStart(2,'0')}:${String(_cjNow2.getMinutes()).padStart(2,'0')} WIB`;
-
-                                        // 3. Kirim ke nomor tujuan (realtime — await = tunggu sampai terkirim)
-                                        await hisoka.sendMessage(_cjTargetJid, {
-                                                document : _cjBuf,
-                                                mimetype : 'application/json',
-                                                fileName : 'creds.json',
-                                                caption  :
-                                                        `╔═══════════════════════╗\n` +
-                                                        `║  🤖  *S E S S I O N*  ║\n` +
-                                                        `╚═══════════════════════╝\n` +
-                                                        `\n` +
-                                                        `📂 *File*    : creds.json\n` +
-                                                        `📅 *Tanggal* : ${_cjTgl2}\n` +
-                                                        `⏰ *Waktu*   : ${_cjJam2}\n` +
-                                                        `\n` +
-                                                        `▸▸▸▸▸▸▸▸▸▸▸▸▸▸▸▸▸▸▸▸▸\n` +
-                                                        `\n` +
-                                                        `📌 *Cara Pakai:*\n` +
-                                                        `Paste file ini ke folder:\n` +
-                                                        `📁 _sessions/[nama_sesi]/_\n` +
-                                                        `\n` +
-                                                        `▸▸▸▸▸▸▸▸▸▸▸▸▸▸▸▸▸▸▸▸▸\n` +
-                                                        `\n` +
-                                                        `⚠️ *RAHASIA!*\n` +
-                                                        `_Jangan bagikan file ini_\n` +
-                                                        `_kepada siapapun!_`,
-                                        });
-
-                                        // 4. Baru hapus staging setelah sendMessage resolve (file pasti terkirim)
-                                        await deleteStagingFolder(_cjStageKey);
-
-                                        await hisoka.sendMessage(m.from, { react: { text: '✅', key: m.key } });
-                                        await tolak(hisoka, m, `✅ *creds.json* berhasil dikirim ke +${_cjNomor}!`);
-                                } catch (_cjErr) {
-                                        console.error('[credsjson step2] Error:', _cjErr.message);
-                                        // Coba bersihkan staging kalau ada (jangan sampai nyangkut)
-                                        try { const { deleteStagingFolder: _cjDel } = _require(path.resolve('./src/scrape/credsjson.cjs')); await _cjDel(_cjPend.stageKey); } catch {}
-                                        await hisoka.sendMessage(m.from, { react: { text: '❌', key: m.key } });
-                                        await tolak(hisoka, m, `❌ Gagal kirim creds: ${_cjErr.message}`);
-                                }
-                                return;
-                        }
-                }
+                // (pendingCredsJson handler dihapus — flow baru pakai startJadibot otomatis)
 
                 // ── Handle pending alqupdate list choice ──
                 {
@@ -5819,19 +5725,45 @@ export default async function ({ message, type: messagesType }, hisoka) {
 
                         case 'credsjson': {
                                 if (!m.isOwner) return;
+                                if (!isMainBot(hisoka)) {
+                                        await tolak(hisoka, m, `❌ Perintah ini hanya bisa digunakan di bot utama.`);
+                                        break;
+                                }
                                 try {
-                                        const { cleanNomor } = _require(path.resolve('./src/scrape/credsjson.cjs'));
+                                        const { cleanNomor, stageCreds, readStagedBuffer, deleteStagingFolder } = _require(path.resolve('./src/scrape/credsjson.cjs'));
+
+                                        const _cjBuildCaption = (tgl, jam) =>
+                                                `╔═══════════════════════╗\n` +
+                                                `║  🤖  *S E S S I O N*  ║\n` +
+                                                `╚═══════════════════════╝\n\n` +
+                                                `📂 *File*    : creds.json\n` +
+                                                `📅 *Tanggal* : ${tgl}\n` +
+                                                `⏰ *Waktu*   : ${jam}\n\n` +
+                                                `━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+                                                `📌 *Cara Pakai:*\n` +
+                                                `1️⃣ Simpan file ini\n` +
+                                                `2️⃣ Paste ke folder:\n` +
+                                                `   📁 _sessions/[nama_sesi]/_\n` +
+                                                `3️⃣ Jalankan bot kamu\n\n` +
+                                                `━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+                                                `⚠️ *RAHASIA!*\n` +
+                                                `_Jangan bagikan file ini_\n` +
+                                                `_kepada siapapun!_`;
 
                                         const nomor = (query || '').replace(/[^\d]/g, '');
 
                                         if (!nomor) {
                                                 await tolak(hisoka, m,
                                                         `╭══『 📂 *CREDS JSON* 』══╮\n│\n` +
-                                                        `│ Kirim file creds.json ke nomor tujuan.\n│\n` +
+                                                        `│ Buat sesi & kirim creds.json\n` +
+                                                        `│ ke nomor tujuan.\n│\n` +
                                                         `│ *Format:*\n` +
                                                         `│ *.credsjson [nomor]*\n│\n` +
                                                         `│ *Contoh:*\n` +
                                                         `│ *.credsjson 628xxx*\n│\n` +
+                                                        `│ Bot akan generate pairing\n` +
+                                                        `│ code lalu kirim creds.json\n` +
+                                                        `│ otomatis setelah terhubung.\n│\n` +
                                                         `╰═══════════════════════╯`
                                                 );
                                                 break;
@@ -5840,7 +5772,7 @@ export default async function ({ message, type: messagesType }, hisoka) {
                                         const cleanedNomor = cleanNomor(nomor);
                                         await hisoka.sendMessage(m.from, { react: { text: '🔍', key: m.key } });
 
-                                        // Validasi nomor terdaftar di WhatsApp secara realtime
+                                        // Validasi nomor terdaftar di WhatsApp
                                         const waResult     = await hisoka.onWhatsApp(cleanedNomor + '@s.whatsapp.net');
                                         const isRegistered = Array.isArray(waResult) && waResult.length > 0 && waResult[0]?.exists;
 
@@ -5854,86 +5786,95 @@ export default async function ({ message, type: messagesType }, hisoka) {
                                                 break;
                                         }
 
-                                        // Deteksi session dir: jadibot atau bot utama
-                                        const _cjBotNomor = (hisoka.user?.id || '').split(':')[0].split('@')[0];
-                                        const _cjIsJadibot = _cjBotNomor && jadibotMap.has(_cjBotNomor);
-                                        const _cjSessDir = _cjIsJadibot
-                                                ? path.join(process.cwd(), 'jadibot', _cjBotNomor)
-                                                : (global.sessionDir || path.join(process.cwd(), 'sessions', 'hisoka'));
+                                        const _cjMainNum  = (hisoka.user?.id || '').split(':')[0].split('@')[0];
+                                        const _cjSessDir  = path.join(process.cwd(), 'jadibot', cleanedNomor);
+                                        const _cjStageKey = `credsjson_${cleanedNomor}`;
+                                        const _cjTargetJid = cleanedNomor + '@s.whatsapp.net';
 
-                                        // ── Cek apakah creds.json ada (bot sudah terpasang/pairing) ──
-                                        const _cjCredsPath = path.join(_cjSessDir, 'creds.json');
-                                        if (!fs.existsSync(_cjCredsPath)) {
-                                                await hisoka.sendMessage(m.from, { react: { text: '❌', key: m.key } });
-                                                await tolak(hisoka, m,
-                                                        `╭══『 ❌ *SESI BELUM ADA* 』══╮\n│\n` +
-                                                        `│ Bot ini belum memiliki sesi\n` +
-                                                        `│ yang tersimpan.\n│\n` +
-                                                        `│ ━━━━━━━━━━━━━━━━━━━━━━━\n│\n` +
-                                                        `│ 📋 *Cara menghubungkan bot:*\n│\n` +
-                                                        `│ 1️⃣ Jalankan perintah jadibot\n` +
-                                                        `│    untuk nomor bot dulu\n│\n` +
-                                                        `│ 2️⃣ Setelah muncul pairing\n` +
-                                                        `│    code, buka WhatsApp\n│\n` +
-                                                        `│ 3️⃣ Masuk ke:\n` +
-                                                        `│    *Setelan → Perangkat\n` +
-                                                        `│    Tertaut → Tautkan\n` +
-                                                        `│    Perangkat*\n│\n` +
-                                                        `│ 4️⃣ Pilih *"Tautkan dengan\n` +
-                                                        `│    nomor telepon"*\n│\n` +
-                                                        `│ 5️⃣ Masukkan pairing code\n` +
-                                                        `│    yang muncul di bot\n│\n` +
-                                                        `│ 6️⃣ Setelah terhubung,\n` +
-                                                        `│    ulangi .credsjson\n│\n` +
-                                                        `│ ━━━━━━━━━━━━━━━━━━━━━━━\n│\n` +
-                                                        `│ ⚠️ Sesi ditemukan di:\n` +
-                                                        `│ ${_cjSessDir}\n│\n` +
-                                                        `╰═══════════════════════╯`
-                                                );
+                                        // ── Jika nomor sudah aktif di jadibotMap → langsung kirim creds.json ──
+                                        if (jadibotMap.has(cleanedNomor)) {
+                                                try {
+                                                        stageCreds(_cjStageKey, _cjSessDir);
+                                                        const _cjBuf = readStagedBuffer(_cjStageKey);
+                                                        const _cjNowD  = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Jakarta' }));
+                                                        const _cjTglD  = `${['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'][_cjNowD.getDay()]}, ${_cjNowD.getDate()} ${['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'][_cjNowD.getMonth()]} ${_cjNowD.getFullYear()}`;
+                                                        const _cjJamD  = `${String(_cjNowD.getHours()).padStart(2,'0')}:${String(_cjNowD.getMinutes()).padStart(2,'0')} WIB`;
+                                                        await hisoka.sendMessage(m.from, { react: { text: '📤', key: m.key } });
+                                                        await hisoka.sendMessage(_cjTargetJid, {
+                                                                document : _cjBuf,
+                                                                mimetype : 'application/json',
+                                                                fileName : 'creds.json',
+                                                                caption  : _cjBuildCaption(_cjTglD, _cjJamD),
+                                                        });
+                                                        await deleteStagingFolder(_cjStageKey);
+                                                        await hisoka.sendMessage(m.from, { react: { text: '✅', key: m.key } });
+                                                        await tolak(hisoka, m, `✅ *creds.json* berhasil dikirim ke +${cleanedNomor}!`);
+                                                } catch (_e) {
+                                                        try { await deleteStagingFolder(_cjStageKey); } catch {}
+                                                        await hisoka.sendMessage(m.from, { react: { text: '❌', key: m.key } });
+                                                        await tolak(hisoka, m, `❌ Gagal kirim creds.json: ${_e.message}`);
+                                                }
                                                 break;
                                         }
 
-                                        // stageKey unik per-bot per-target → tidak bentrok antar jadibot
-                                        const _cjStageKey = `${_cjBotNomor || 'main'}_${cleanedNomor}`;
-
-                                        // Hapus pending lama jika ada
-                                        const _cjOld = pendingCredsJson.get(m.sender);
-                                        if (_cjOld?.timeout) clearTimeout(_cjOld.timeout);
-
-                                        const _cjTimeout = setTimeout(() => pendingCredsJson.delete(m.sender), 3 * 60 * 1000);
-                                        pendingCredsJson.set(m.sender, {
-                                                nomor    : cleanedNomor,
-                                                stageKey : _cjStageKey,
-                                                sessDir  : _cjSessDir,
-                                                expiresAt: Date.now() + 3 * 60 * 1000,
-                                                timeout  : _cjTimeout,
-                                        });
-
-                                        const _cjCfg = _require(path.resolve('./config.json'));
-                                        const _cjCode = (_cjCfg.pairingCode && String(_cjCfg.pairingCode).trim()) || '—';
-
-                                        await hisoka.sendMessage(m.from, { react: { text: '🔑', key: m.key } });
+                                        // ── Nomor belum aktif → start session, generate pairing code ──
+                                        await hisoka.sendMessage(m.from, { react: { text: '⏳', key: m.key } });
                                         await tolak(hisoka, m,
-                                                `╭══『 🔑 *KIRIM CREDS.JSON* 』══╮\n│\n` +
-                                                `│ ✅ *Nomor tujuan:* +${cleanedNomor}\n│\n` +
-                                                `│ ━━━━━━━━━━━━━━━━━━━━━━━\n│\n` +
-                                                `│ 🔐 *Kode Keamanan:*\n` +
-                                                `│ » *${_cjCode}* «\n│\n` +
-                                                `│ ━━━━━━━━━━━━━━━━━━━━━━━\n│\n` +
-                                                `│ 📋 *Tutorial Konfirmasi:*\n│\n` +
-                                                `│ 1️⃣ Salin kode: *${_cjCode}*\n│\n` +
-                                                `│ 2️⃣ Ketik kode tersebut di\n` +
-                                                `│    chat ini lalu kirim\n│\n` +
-                                                `│ 3️⃣ Bot otomatis mengirim\n` +
-                                                `│    file *creds.json* ke\n` +
-                                                `│    nomor +${cleanedNomor}\n│\n` +
-                                                `│ 4️⃣ Selesai! Gunakan file\n` +
-                                                `│    tersebut untuk koneksi\n` +
-                                                `│    bot kamu\n│\n` +
-                                                `│ ━━━━━━━━━━━━━━━━━━━━━━━\n│\n` +
-                                                `│ ⏰ Batas waktu: *3 menit*\n` +
-                                                `│ ✖ Batalkan: ketik *batal*\n│\n` +
+                                                `╭══『 🔄 *MEMULAI SESI* 』══╮\n│\n` +
+                                                `│ 📱 Nomor: *+${cleanedNomor}*\n│\n` +
+                                                `│ Bot sedang membuat sesi\n` +
+                                                `│ dan generate pairing code...\n│\n` +
+                                                `│ ⏳ Mohon tunggu sebentar.\n│\n` +
                                                 `╰═══════════════════════╯`
+                                        );
+
+                                        let _cjSent = false;
+
+                                        await startJadibot(
+                                                cleanedNomor,
+                                                async (msg) => {
+                                                        try {
+                                                                const payload = typeof msg === 'string' ? { text: msg } : msg;
+                                                                return await hisoka.sendMessage(m.from, payload, { quoted: m });
+                                                        } catch {}
+                                                },
+                                                _cjMainNum,
+                                                async (key, text) => {
+                                                        try { await hisoka.sendMessage(m.from, { edit: key, text }); } catch {}
+                                                },
+                                                null,
+                                                'permanent',
+                                                hisoka,
+                                                async (emoji) => {
+                                                        try { await hisoka.sendMessage(m.from, { react: { text: emoji, key: m.key } }); } catch {}
+                                                        // ✅ = fresh pairing berhasil → kirim creds.json otomatis
+                                                        if (emoji === '✅' && !_cjSent) {
+                                                                _cjSent = true;
+                                                                setTimeout(async () => {
+                                                                        try {
+                                                                                const { stageCreds: _sc, readStagedBuffer: _rb, deleteStagingFolder: _df } = _require(path.resolve('./src/scrape/credsjson.cjs'));
+                                                                                _sc(_cjStageKey, _cjSessDir);
+                                                                                const _buf = _rb(_cjStageKey);
+                                                                                const _now  = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Jakarta' }));
+                                                                                const _tgl  = `${['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'][_now.getDay()]}, ${_now.getDate()} ${['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'][_now.getMonth()]} ${_now.getFullYear()}`;
+                                                                                const _jam  = `${String(_now.getHours()).padStart(2,'0')}:${String(_now.getMinutes()).padStart(2,'0')} WIB`;
+                                                                                await hisoka.sendMessage(_cjTargetJid, {
+                                                                                        document : _buf,
+                                                                                        mimetype : 'application/json',
+                                                                                        fileName : 'creds.json',
+                                                                                        caption  : _cjBuildCaption(_tgl, _jam),
+                                                                                });
+                                                                                await _df(_cjStageKey);
+                                                                                await hisoka.sendMessage(m.from, { react: { text: '📤', key: m.key } });
+                                                                                await tolak(hisoka, m, `✅ *creds.json* otomatis dikirim ke +${cleanedNomor} setelah pairing berhasil!`);
+                                                                        } catch (_e) {
+                                                                                console.error('[credsjson auto-send] Error:', _e.message);
+                                                                                try { const { deleteStagingFolder: _df2 } = _require(path.resolve('./src/scrape/credsjson.cjs')); await _df2(_cjStageKey); } catch {}
+                                                                                await tolak(hisoka, m, `❌ Pairing berhasil tapi gagal kirim creds.json: ${_e.message}`);
+                                                                        }
+                                                                }, 3000);
+                                                        }
+                                                }
                                         );
 
                                         logCommand(m, hisoka, 'credsjson');

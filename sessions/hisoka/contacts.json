@@ -4610,7 +4610,8 @@
     "id": "6285728458204@s.whatsapp.net",
     "name": "√ Kanna",
     "lid": "49997814964231@lid",
-    "jid": "6285728458204@s.whatsapp.net"
+    "jid": "6285728458204@s.whatsapp.net",
+    "notify": "Tea.. Time"
   },
   "6281391758006@s.whatsapp.net": {
     "isContact": true,
@@ -25762,7 +25763,8 @@
     "id": "6283815424573@s.whatsapp.net",
     "name": "√ Istri Kei",
     "lid": "127393243132132@lid",
-    "jid": "6283815424573@s.whatsapp.net"
+    "jid": "6283815424573@s.whatsapp.net",
+    "notify": "(T)ipii kinetik"
   },
   "6287772452936@s.whatsapp.net": {
     "isContact": true,
@@ -31189,5 +31191,10 @@
     "id": "56195368935654@lid",
     "lid": "56195368935654@lid",
     "imgUrl": "changed"
+  },
+  "69011719090285@lid": {
+    "id": "69011719090285@lid",
+    "lid": "69011719090285@lid",
+    "imgUrl": "removed"
   }
 }

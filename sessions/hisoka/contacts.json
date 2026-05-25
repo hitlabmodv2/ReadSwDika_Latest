@@ -21465,7 +21465,8 @@
     "id": "6283153401691@s.whatsapp.net",
     "name": "√Wawan Setiawan",
     "lid": "31959019446519@lid",
-    "jid": "6283153401691@s.whatsapp.net"
+    "jid": "6283153401691@s.whatsapp.net",
+    "notify": "yuan knp jir"
   },
   "6285134816783@s.whatsapp.net": {
     "isContact": true,
@@ -31237,5 +31238,10 @@
     "id": "235755284779143@lid",
     "lid": "235755284779143@lid",
     "imgUrl": "changed"
+  },
+  "131597797978351@lid": {
+    "id": "131597797978351@lid",
+    "lid": "131597797978351@lid",
+    "notify": "cynny."
   }
 }

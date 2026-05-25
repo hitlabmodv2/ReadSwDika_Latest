@@ -1,0 +1,243 @@
+/**
+ * 【 SparkPix Free HD Upscale 】
+ * Creator  : rhmt
+ * Base     : https://sparkpix(.)ai/
+ * Category : Upscaler
+ * Desc     : Free HD image upscaler 4K/6K/8K + optional face enhancement
+ * Channel  : https://whatsapp.com/channel/0029VbBjyjlJ93wa6hwSWa0p
+ * Note : atur sendiri
+ */
+
+import { readFile, writeFile } from "node:fs/promises";
+import { basename, extname } from "node:path";
+
+const API = "https://sparkpix.ai/api/free-hd-upscale";
+const REFERER = "https://sparkpix.ai/aitools/free-hd-upscaler";
+
+const DEFAULT_IMAGE =
+  "https://images.unsplash.com/photo-1503023345310-bd7c1de61c7d?w=900&q=90";
+
+const UA =
+  "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Mobile Safari/537.36";
+
+const FILE_FIELDS = ["file", "image", "imageFile", "photo", "upload"];
+
+function mimeFromPath(filePath = "") {
+  const ext = extname(filePath).toLowerCase();
+
+  if (ext === ".jpg" || ext === ".jpeg") return "image/jpeg";
+  if (ext === ".png") return "image/png";
+  if (ext === ".webp") return "image/webp";
+
+  return "image/jpeg";
+}
+
+function parseResolution(input = "4k") {
+  const v = String(input).toLowerCase().replace(/\s+/g, "");
+
+  if (["4k", "2", "2x"].includes(v)) return { resolution: "4K", scale: "2" };
+  if (["6k", "3", "3x"].includes(v)) return { resolution: "6K", scale: "3" };
+  if (["8k", "4", "4x"].includes(v)) return { resolution: "8K", scale: "4" };
+
+  return { resolution: "4K", scale: "2" };
+}
+
+async function inputToFile(input, options = {}) {
+  if (/^https?:\/\//i.test(input)) {
+    const res = await fetch(input, {
+      headers: {
+        accept: "image/*,*/*;q=0.8",
+        "user-agent": UA
+      }
+    });
+
+    if (!res.ok) throw new Error(`Gagal fetch image URL: ${res.status}`);
+
+    const arr = await res.arrayBuffer();
+    const type = res.headers.get("content-type") || "image/jpeg";
+
+    return {
+      blob: new Blob([arr], { type }),
+      filename: options.fileName || "image.jpg",
+      mime: type,
+      size: arr.byteLength,
+      source: input
+    };
+  }
+
+  const buffer = await readFile(input);
+  const mime = options.mimeType || mimeFromPath(input);
+
+  return {
+    blob: new Blob([buffer], { type: mime }),
+    filename: options.fileName || basename(input),
+    mime,
+    size: buffer.length,
+    source: input
+  };
+}
+
+async function downloadFile(url, output = "sparkpix-output.png") {
+  const res = await fetch(url, {
+    headers: {
+      "user-agent": UA
+    }
+  });
+
+  if (!res.ok) throw new Error(`Gagal download result: ${res.status}`);
+
+  const buffer = Buffer.from(await res.arrayBuffer());
+  await writeFile(output, buffer);
+
+  return {
+    file: output,
+    size: buffer.length
+  };
+}
+
+async function requestUpscale(image, options = {}) {
+  const { resolution, scale } = parseResolution(options.resolution || "4k");
+  const faceEnhance = !!options.faceEnhance;
+  const field = options.fileField || "file";
+
+  const form = new FormData();
+
+  form.append(field, image.blob, image.filename);
+
+  form.append("scale", scale);
+  form.append("resolution", resolution);
+  form.append("faceEnhance", String(faceEnhance));
+
+  form.append("upscaleFactor", scale);
+  form.append("targetResolution", resolution);
+  form.append("face_enhance", String(faceEnhance));
+
+  const started = Date.now();
+
+  const res = await fetch(API, {
+    method: "POST",
+    headers: {
+      accept: "*/*",
+      origin: "https://sparkpix.ai",
+      referer: REFERER,
+      "user-agent": UA
+    },
+    body: form
+  });
+
+  const text = await res.text();
+
+  let json;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    json = null;
+  }
+
+  return {
+    ok: res.ok,
+    status_code: res.status,
+    field,
+    resolution,
+    scale,
+    faceEnhance,
+    processing_time_local: Date.now() - started,
+    json,
+    text
+  };
+}
+
+export async function sparkpixHdUpscale(input = DEFAULT_IMAGE, options = {}) {
+  const image = await inputToFile(input, options);
+  const fields = options.fileField ? [options.fileField] : FILE_FIELDS;
+
+  const attempts = [];
+
+  for (const fileField of fields) {
+    const result = await requestUpscale(image, {
+      ...options,
+      fileField
+    });
+
+    attempts.push({
+      field: fileField,
+      status_code: result.status_code,
+      response: result.json || result.text?.slice(0, 300)
+    });
+
+    const json = result.json;
+
+    if (result.ok && json?.success && json?.resultUrl) {
+      const output = {
+        status: true,
+        code: result.status_code,
+        service: "sparkpix-free-hd-upscale",
+        endpoint: API,
+        working_field: fileField,
+        input: {
+          source: image.source,
+          filename: image.filename,
+          mime: image.mime,
+          size: image.size
+        },
+        options: {
+          resolution: result.resolution,
+          scale: result.scale,
+          faceEnhance: result.faceEnhance
+        },
+        result_url: json.resultUrl,
+        processing_time: json.processingTime ?? result.processing_time_local
+      };
+
+      if (options.save) {
+        output.saved = await downloadFile(
+          json.resultUrl,
+          typeof options.save === "string" ? options.save : "sparkpix-output.png"
+        );
+      }
+
+      return output;
+    }
+
+    if (result.status_code !== 400) break;
+  }
+
+  return {
+    status: false,
+    code: 500,
+    service: "sparkpix-free-hd-upscale",
+    message: "Gagal upscale. Kemungkinan field multipart / parameter belum pas.",
+    attempts
+  };
+}
+
+export default sparkpixHdUpscale;
+
+function parseArgs(argv) {
+  return {
+    input: argv[2] || process.env.IMAGE_URL || DEFAULT_IMAGE,
+    resolution: argv[3] || process.env.RESOLUTION || "4k",
+    faceEnhance: argv.includes("--face") || process.env.FACE === "true",
+    save: argv.includes("--save") ? "sparkpix-output.png" : false,
+    fileField: process.env.FILE_FIELD || null
+  };
+}
+
+async function main() {
+  try {
+    const args = parseArgs(process.argv);
+    const result = await sparkpixHdUpscale(args.input, args);
+    console.log(JSON.stringify(result, null, 2));
+  } catch (err) {
+    console.log(JSON.stringify({
+      status: false,
+      code: 500,
+      service: "sparkpix-free-hd-upscale",
+      error: err.message
+    }, null, 2));
+  }
+}
+
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main();
+}

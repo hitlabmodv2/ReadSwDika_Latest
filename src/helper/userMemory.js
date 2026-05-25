@@ -1,19 +1,24 @@
 /**
  * ───────────────────────────────
- *  USER MEMORY HELPER (Simple v1)
- *  Recode By : Bang Wilykun
+ *  Base Script : Bang Dika Ardnt
+ *  Recode By   : Bang Wilykun
+ *  WhatsApp    : 6289688206739
+ *  Telegram    : @Wilykun1994
  * ───────────────────────────────
- *  Nyimpen preferensi ringan per-user supaya AI ingat lintas sesi:
- *    • style    : formal / santai / nyablak  (auto-detect dari pola bahasa)
- *    • nickname : panggilan pilihan user      (cuma kalau user EXPLICIT minta)
- *    • lang     : id / en / mix               (auto-detect)
+ *  Script ini khusus donasi/VIP
+ *  Support dari kalian bikin saya
+ *  makin semangat update fitur,
+ *  fix bug, dan rawat script ini.
  *
- *  Disimpen di file user yg udah ada (data/users/<id>.json) di key `aiMemory`,
- *  jadi ga bikin storage baru.
+ *  Dilarang menjual ulang script ini
+ *  Tanpa izin resmi dari developer.
+ *  Jika ketahuan = NO UPDATE / NO FIX
+ *
+ *  Hargai karya, gunakan dengan bijak.
+ *  Terima kasih sudah support.
  * ───────────────────────────────
  */
-
-import { getUserExtra, setUserExtra } from '../db/userDb.js';
+import { getUserExtra, setUserExtra, getAllUserIds } from '../db/userDb.js';
 
 const DEFAULT_MEMORY = { style: null, nickname: null, lang: null, lastUpdated: null, msgCount: 0 };
 
@@ -47,6 +52,18 @@ export function saveUserMemory(sender, memory) {
 
 export function clearUserMemory(sender) {
     setUserExtra(sender, 'aiMemory', { ...DEFAULT_MEMORY });
+}
+
+export function clearAllUserMemory() {
+    const ids = getAllUserIds();
+    let count = 0;
+    for (const id of ids) {
+        try {
+            setUserExtra(id, 'aiMemory', { ...DEFAULT_MEMORY });
+            count++;
+        } catch {}
+    }
+    return count;
 }
 
 function detectStyle(text = '') {

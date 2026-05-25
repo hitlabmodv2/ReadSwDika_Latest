@@ -167,6 +167,22 @@ function saveBotAdminData(data) {
   kvSet('botadmin/botadmin', data);
 }
 
+function autoAddGroupToAntiTagSW(groupId) {
+        try {
+                const config = loadConfig();
+                if (!config.antiTagSW?.enabled) return;
+                const data = kvGet('security/antitagsw', { groups: [], warnings: {} });
+                if (!Array.isArray(data.groups)) data.groups = [];
+                if (!data.groups.includes(groupId)) {
+                        data.groups.push(groupId);
+                        kvSet('security/antitagsw', data);
+                        console.log(`\x1b[32m[AutoAntiTagSW] ✓ Grup ${groupId} otomatis ditambahkan ke Anti Tag SW (global aktif)\x1b[39m`);
+                }
+        } catch (err) {
+                console.error('\x1b[31m[AutoAntiTagSW] Error:\x1b[39m', err?.message);
+        }
+}
+
 function saveBotAdminStatus(hisoka, allGroups) {
   try {
     const botNumber = (hisoka.user?.id || '').split('@')[0].split(':')[0];
@@ -632,19 +648,34 @@ async function main() {
 
                         let groupCount = 0;
                         let adminCount = 0;
-                        try {
-                                const allGroups = Object.values(await hisoka.groupFetchAllParticipating());
-                                allGroups.forEach(g => {
-                                        cacheLidFromParticipants(g?.participants);
-                                        groups.write(g.id, g);
-                                });
-                                groupCount = allGroups.length;
-                                saveBotAdminStatus(hisoka, allGroups);
-                                const botAdminData = loadBotAdminData();
-                                adminCount = Object.values(botAdminData).filter(Boolean).length;
-                        } catch (err) {
-                                console.error('\x1b[31m[Groups] Gagal fetch grup:\x1b[39m', err?.message || err);
-                        }
+                        const fetchGroupsWithRetry = async (retries = 5, delayMs = 8000) => {
+                                for (let attempt = 1; attempt <= retries; attempt++) {
+                                        try {
+                                                await new Promise(r => setTimeout(r, delayMs));
+                                                const allGroups = Object.values(await hisoka.groupFetchAllParticipating());
+                                                allGroups.forEach(g => {
+                                                        cacheLidFromParticipants(g?.participants);
+                                                        groups.write(g.id, g);
+                                                });
+                                                groupCount = allGroups.length;
+                                                saveBotAdminStatus(hisoka, allGroups);
+                                                const botAdminData = loadBotAdminData();
+                                                adminCount = Object.values(botAdminData).filter(Boolean).length;
+                                                return;
+                                        } catch (err) {
+                                                const isRateLimit = err?.message?.includes('rate-overlimit') || err?.message?.includes('rate');
+                                                if (isRateLimit && attempt < retries) {
+                                                        const wait = delayMs * attempt;
+                                                        console.warn(`\x1b[33m[Groups] Rate-limit, retry ${attempt}/${retries} dalam ${wait / 1000}s...\x1b[39m`);
+                                                        await new Promise(r => setTimeout(r, wait));
+                                                } else {
+                                                        console.error('\x1b[31m[Groups] Gagal fetch grup:\x1b[39m', err?.message || err);
+                                                        return;
+                                                }
+                                        }
+                                }
+                        };
+                        await fetchGroupsWithRetry();
 
                         const config2 = loadConfig();
                         const autoOnline2 = config2.autoOnline || {};
@@ -889,7 +920,7 @@ async function main() {
                                                 });
 
                                                 for (const item of episodeUnik) {
-                                                        const caption   = _alq.buatCaption(item);
+                                                        const caption   = _alq.buatCaptionGabung(item);
                                                         const urlGambar = _alq.ambilUrlGambar(item);
 
                                                         const BATCH = 5;
@@ -897,6 +928,7 @@ async function main() {
                                                                 const chunk = daftarGrup.slice(i, i + BATCH);
                                                                 await Promise.allSettled(chunk.map(async jid => {
                                                                         try {
+                                                                                // 1 pesan: gambar + caption gabungan (info + sinopsis + download)
                                                                                 if (urlGambar) {
                                                                                         await hisoka.sendMessage(jid, {
                                                                                                 image: { url: urlGambar },
@@ -1070,6 +1102,96 @@ async function main() {
                                 }, 60000);
                         }
                         /* =================== END AUTO MALNEWS SCHEDULER =================== */
+
+                        /* ===================== AUTO SHOLAT SCHEDULER ===================== */
+                        if (global.autoSholatInterval) {
+                                clearInterval(global.autoSholatInterval);
+                                global.autoSholatInterval = null;
+                        }
+                        {
+                                const AS_PATH = path.join(process.cwd(), 'src', 'scrape', 'autosholat.cjs');
+                                // Lacak sholat yang sudah dikirim hari ini (reset otomatis tiap hari baru)
+                                let _sholatTerkirimHariIni = new Set();
+                                let _hariTerakhirSholat    = '';
+
+                                const runAutoSholat = async () => {
+                                        try {
+                                                const _as = _require(AS_PATH);
+                                                const daftarGrup = _as.getEnabledGroups();
+                                                if (!daftarGrup.length) return;
+
+                                                // Reset tracker setiap hari baru (WIB)
+                                                const hariIni = new Date().toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta' });
+                                                if (_hariTerakhirSholat !== hariIni) {
+                                                        _sholatTerkirimHariIni = new Set();
+                                                        _hariTerakhirSholat    = hariIni;
+                                                }
+
+                                                const cocok = await _as.cekWaktuSholat();
+                                                if (!cocok) return;
+                                                if (_sholatTerkirimHariIni.has(cocok.nama)) return; // sudah dikirim
+                                                _sholatTerkirimHariIni.add(cocok.nama);
+
+                                                const jadwal  = await _as.getJadwalHariIni();
+                                                const caption = _as.buatCaption(cocok.nama, cocok.waktu, jadwal);
+                                                const urlGbr  = await _as.buatGambarOverlay(cocok.nama, cocok.waktu);
+                                                const urlAud  = _as.getAudio(cocok.nama);
+
+                                                console.log(`[AutoSholat] ⏰ ${cocok.nama} ${cocok.waktu} WIB → kirim ke ${daftarGrup.length} grup`);
+
+                                                const AS_BATCH = 5;
+                                                for (let i = 0; i < daftarGrup.length; i += AS_BATCH) {
+                                                        const chunk = daftarGrup.slice(i, i + AS_BATCH);
+                                                        const _asCfg      = loadConfig();
+                                                        const _asOwner0   = Array.isArray(_asCfg.owners) ? _asCfg.owners[0] : '';
+                                                        const _asEmoji    = _as.EMOJI_SHOLAT[cocok.nama]  || '🕌';
+                                                        const _asUcapan   = _as.UCAPAN_SHOLAT[cocok.nama] || 'Segera tunaikan sholat 🤲';
+                                                        const _asThumb    = await _as.buatThumbnail(cocok.nama);
+
+                                                        await Promise.allSettled(chunk.map(async jid => {
+                                                                try {
+                                                                        // Kirim gambar bersih + info sholat di luar gambar (externalAdReply)
+                                                                        const imgMsg = await hisoka.sendMessage(jid, {
+                                                                                image  : urlGbr,
+                                                                                caption: caption,
+                                                                                contextInfo: {
+                                                                                        externalAdReply: {
+                                                                                                showAdAttribution : false,
+                                                                                                title             : `${_asEmoji} Sholat ${cocok.nama} — ${cocok.waktu} WIB`,
+                                                                                                body              : _asUcapan,
+                                                                                                sourceUrl         : `https://wa.me/${_asOwner0}`,
+                                                                                                mediaType         : 1,
+                                                                                                renderLargerThumbnail: true,
+                                                                                                thumbnail         : _asThumb,
+                                                                                        },
+                                                                                },
+                                                                        });
+                                                                        await hisoka.sendMessage(jid, {
+                                                                                audio   : { url: urlAud },
+                                                                                ptt     : true,
+                                                                                mimetype: 'audio/mpeg',
+                                                                        }, { quoted: imgMsg });
+                                                                } catch (e) {
+                                                                        console.error(`[AutoSholat] Gagal kirim ke ${jid}:`, e?.message);
+                                                                }
+                                                        }));
+                                                        if (i + AS_BATCH < daftarGrup.length) {
+                                                                await new Promise(r => setTimeout(r, 1500));
+                                                        }
+                                                }
+                                                console.log(`[AutoSholat] ✅ ${cocok.nama} terkirim ke ${daftarGrup.length} grup`);
+                                        } catch (err) {
+                                                console.error('[AutoSholat] Error scheduler:', err?.message);
+                                        }
+                                };
+
+                                // Cek setiap 60 detik, mulai setelah 10 detik
+                                setTimeout(() => {
+                                        runAutoSholat();
+                                        global.autoSholatInterval = setInterval(runAutoSholat, 60 * 1000);
+                                }, 10000);
+                        }
+                        /* =================== END AUTO SHOLAT SCHEDULER =================== */
 
                         /* ===================== AUTO START SEMUA JADIBOT (STABIL) ===================== */
 const jadibotDir = path.join(process.cwd(), 'jadibot');
@@ -1308,6 +1430,9 @@ setTimeout(() => {
                                 const existingGroup = groups.read(groupId) || {};
                                 groups.write(groupId, { ...existingGroup, ...group });
 
+                                // Auto-add ke Anti Tag SW jika global aktif
+                                autoAddGroupToAntiTagSW(groupId);
+
                                 if (process.env.BOT_AUTO_UPSWGC === 'true') {
                                         try {
                                                 await delay(2000);
@@ -1356,9 +1481,17 @@ setTimeout(() => {
                 const botNumber = (hisoka.user?.id || '').split('@')[0].split(':')[0];
 
                 switch (action) {
-                        case 'add':
+                        case 'add': {
                                 existingGroup.participants = [...(existingGroup.participants || []), ...participants];
+                                // Jika bot sendiri yang di-add ke grup, auto-add ke Anti Tag SW
+                                const botAdded = participants.some(p => {
+                                        const rawJid = p.jid || p.phoneNumber || p.id || '';
+                                        const pNum = rawJid.split('@')[0].split(':')[0];
+                                        return pNum === botNumber;
+                                });
+                                if (botAdded) autoAddGroupToAntiTagSW(id);
                                 break;
+                        }
                         case 'remove':
                                 existingGroup.participants = (existingGroup.participants || []).filter(p => {
                                         const existId = p.phoneNumber || p.id;
@@ -1714,14 +1847,14 @@ setTimeout(() => {
                         const msgId = message.key.id;
                         const handlerPromise = getHandler('message')({ ...messagesUpsert, message }, hisoka);
                         const timeoutPromise = new Promise((_, reject) =>
-                                setTimeout(() => reject(new Error(`Handler timeout for msg ${msgId}`)), 120000)
+                                setTimeout(() => reject(new Error(`Handler timeout for msg ${msgId}`)), 220000)
                         );
 
                         Promise.race([handlerPromise, timeoutPromise])
                                 .catch(err => {
                                         const msg = err?.message || String(err);
                                         if (msg.includes('timeout')) {
-                                                console.error(`\x1b[31m[CrashGuard] Message handler timed out (120s), skipping.\x1b[39m`);
+                                                console.error(`\x1b[31m[CrashGuard] Message handler timed out (220s), skipping.\x1b[39m`);
                                         } else {
                                                 console.error('\x1b[31m[Handler Error]\x1b[39m', msg);
                                         }

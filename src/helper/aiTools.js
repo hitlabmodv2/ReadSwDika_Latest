@@ -1,601 +1,116 @@
 /**
- * ───────────────────────────────────────────────────────────
- *  AI TOOLS — extra capabilities buat Wily AI
- *  Pola sama kayak [GAMBAR:...] di imageSearch.js: AI nulis
- *  marker di response, handler nge-extract & kirim media.
+ * ───────────────────────────────
+ *  Base Script : Bang Dika Ardnt
+ *  Recode By   : Bang Wilykun
+ *  WhatsApp    : 6289688206739
+ *  Telegram    : @Wilykun1994
+ * ───────────────────────────────
+ *  Script ini khusus donasi/VIP
+ *  Support dari kalian bikin saya
+ *  makin semangat update fitur,
+ *  fix bug, dan rawat script ini.
  *
- *  Marker yang didukung:
- *    [VN: teks]                  → voice note bahasa Indonesia
- *    [VN-JP: teks]               → voice note bahasa Jepang (kawaii)
- *    [VN-EN: teks]               → voice note bahasa Inggris
- *    [VN-XX: teks]               → kode bahasa lain (es, fr, ko, zh, dll)
- *    [STIKER: query]             → sticker WhatsApp (search img → webp)
- *    [LAGU: judul lagu]          → audio mp3 dari YouTube (search by title)
- *    [VIDEO: judul/URL]          → video mp4 dari YouTube / URL langsung
- *    [TT: url]                   → download TikTok video/slideshow
- *    [IG: url]                   → download Instagram reel/post/story
- *    [YTMP3: url]                → download audio MP3 dari YouTube URL
+ *  Dilarang menjual ulang script ini
+ *  Tanpa izin resmi dari developer.
+ *  Jika ketahuan = NO UPDATE / NO FIX
  *
- *  [GAMBAR:...] tetap di imageSearch.js (legacy).
- * ───────────────────────────────────────────────────────────
+ *  Hargai karya, gunakan dengan bijak.
+ *  Terima kasih sudah support.
+ * ───────────────────────────────
  */
 
 import axios from 'axios';
-import fs from 'fs';
 import path from 'path';
+import fs from 'fs';
 import { exec } from 'child_process';
-import { fileURLToPath } from 'url';
-import { searchAndGetImage } from './imageSearch.js';
-import { isValidStickerUrl, selectStickerByMood } from './stickerMap.js';
+import util from 'util';
+import { selectStickerByMood, isValidStickerUrl } from './stickerMap.js';
 import { logStickerSent } from './aiStickerStory.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const execAsync = util.promisify(exec);
+
+const WILY_VERBOSE_AITOOLS = process.env.WILY_VERBOSE_LOGS === 'true' || process.env.BOT_DEBUG_LOG === 'true';
+function aiToolsLog(...args)   { if (WILY_VERBOSE_AITOOLS) console.log(...args); }
+function aiToolsError(...args) { console.error(...args); }
 
 const TMP_DIR = path.join(process.cwd(), 'tmp');
-const BIN_DIR = path.join(process.cwd(), 'bin');
-
 function ensureTmp() {
     if (!fs.existsSync(TMP_DIR)) fs.mkdirSync(TMP_DIR, { recursive: true });
 }
 
-const aiToolsLog = (...args) => {
-    if (typeof globalThis.wilyLog === 'function') globalThis.wilyLog(...args);
-    else console.log(...args);
-};
-
-const aiToolsError = (...args) => {
-    if (typeof globalThis.wilyError === 'function') globalThis.wilyError(...args);
-    else console.error(...args);
-};
-
-// ════════════════════════════════════════════════════════════
-//  EDGE NEURAL TTS  (free, no API key — Microsoft Azure voices)
-//  Suaranya jauh lebih natural dibanding Google Translate TTS.
-//  Voice mapping per bahasa di EDGE_VOICES.
-//  Fallback otomatis ke Google TTS kalau Edge gagal.
-// ════════════════════════════════════════════════════════════
-
-// Voice + prosody preset per bahasa.
-// Indonesia → suara cewek muda natural (Gadis).
-// Jepang   → cewek kawaii (Nanami) + pitch tinggi & rate cepat ala
-//            karakter Honolulu dari Azur Lane.
-const EDGE_VOICES = {
-    'id':    { voice: 'id-ID-GadisNeural',  pitch: '+0Hz',  rate: '+0%' },
-    'ja':    { voice: 'ja-JP-NanamiNeural', pitch: '+25Hz', rate: '+8%' }, // Honolulu kawaii
-    'en':    { voice: 'en-US-JennyNeural',  pitch: '+0Hz',  rate: '+0%' },
-    'ko':    { voice: 'ko-KR-SunHiNeural',  pitch: '+0Hz',  rate: '+0%' },
-    'zh-CN': { voice: 'zh-CN-XiaoxiaoNeural', pitch: '+0Hz', rate: '+0%' },
-    'zh-TW': { voice: 'zh-TW-HsiaoChenNeural', pitch: '+0Hz', rate: '+0%' },
-    'ar':    { voice: 'ar-SA-ZariyahNeural', pitch: '+0Hz', rate: '+0%' },
-    'es':    { voice: 'es-ES-ElviraNeural', pitch: '+0Hz',  rate: '+0%' },
-    'fr':    { voice: 'fr-FR-DeniseNeural', pitch: '+0Hz',  rate: '+0%' },
-    'de':    { voice: 'de-DE-KatjaNeural',  pitch: '+0Hz',  rate: '+0%' },
-    'it':    { voice: 'it-IT-ElsaNeural',   pitch: '+0Hz',  rate: '+0%' },
-    'pt':    { voice: 'pt-BR-FranciscaNeural', pitch: '+0Hz', rate: '+0%' },
-    'ru':    { voice: 'ru-RU-SvetlanaNeural', pitch: '+0Hz', rate: '+0%' },
-    'tr':    { voice: 'tr-TR-EmelNeural',   pitch: '+0Hz',  rate: '+0%' },
-    'th':    { voice: 'th-TH-PremwadeeNeural', pitch: '+0Hz', rate: '+0%' },
-    'vi':    { voice: 'vi-VN-HoaiMyNeural', pitch: '+0Hz',  rate: '+0%' },
-    'hi':    { voice: 'hi-IN-SwaraNeural',  pitch: '+0Hz',  rate: '+0%' },
-    'jw':    { voice: 'id-ID-GadisNeural',  pitch: '+0Hz',  rate: '+0%' }, // Jawa pakai voice ID
-    'su':    { voice: 'id-ID-GadisNeural',  pitch: '+0Hz',  rate: '+0%' }, // Sunda pakai voice ID
-};
-
-const EDGE_OUTPUT_FORMAT = 'audio-24khz-48kbitrate-mono-mp3';
-
-/**
- * Generate voice note pakai Microsoft Edge Neural TTS (gratis, no API key).
- * Suara cewek natural ala asli, bukan robot.
- * @param {string} text - Teks yang diucapkan.
- * @param {string} lang - Kode bahasa: 'id', 'ja', 'en', dll.
- * @returns {Promise<Buffer>} Buffer mp3.
- */
-export async function edgeTTS(text, lang = 'id') {
-    const cleanText = String(text || '').replace(/[\[\]]/g, '').trim();
-    if (!cleanText) throw new Error('Teks TTS kosong');
-    if (cleanText.length > 3000) {
-        throw new Error('Teks TTS terlalu panjang (max 3000 karakter)');
-    }
-
-    const preset = EDGE_VOICES[lang] || EDGE_VOICES['id'];
-    const { MsEdgeTTS } = await import('msedge-tts');
-    const tts = new MsEdgeTTS();
-    await tts.setMetadata(preset.voice, EDGE_OUTPUT_FORMAT);
-
-    const { audioStream } = await tts.toStream(cleanText, {
-        pitch: preset.pitch,
-        rate: preset.rate,
-    });
-
-    return new Promise((resolve, reject) => {
-        const chunks = [];
-        const timer = setTimeout(() => {
-            try { audioStream.destroy?.(); } catch (_) {}
-            reject(new Error('Edge TTS timeout (>30s)'));
-        }, 30000);
-        audioStream.on('data', c => chunks.push(c));
-        audioStream.on('end', () => {
-            clearTimeout(timer);
-            const buf = Buffer.concat(chunks);
-            if (buf.length < 100) {
-                return reject(new Error('Edge TTS response kosong (voice mungkin tidak support)'));
-            }
-            resolve(buf);
-        });
-        audioStream.on('error', e => {
-            clearTimeout(timer);
-            reject(new Error(`Edge TTS stream error: ${e.message}`));
-        });
-    });
-}
-
-// ════════════════════════════════════════════════════════════
-//  GOOGLE TTS  (fallback — free, no API key, suara kurang natural)
-// ════════════════════════════════════════════════════════════
-
-const TTS_MAX_CHUNK = 190; // safe limit per request
-const TTS_BASE = 'https://translate.google.com/translate_tts';
-
-// Split teks panjang jadi chunk per ~190 char tanpa motong kata.
-function chunkText(text, max = TTS_MAX_CHUNK) {
-    const chunks = [];
-    let remaining = String(text || '').trim();
-    while (remaining.length > 0) {
-        if (remaining.length <= max) {
-            chunks.push(remaining);
-            break;
-        }
-        // Cari titik/koma/spasi sebelum batas max
-        let cut = -1;
-        for (let i = max; i > Math.floor(max * 0.5); i--) {
-            const ch = remaining[i];
-            if (ch === '.' || ch === '!' || ch === '?' || ch === ',' || ch === ';' || ch === '\n') {
-                cut = i + 1; break;
-            }
-        }
-        if (cut < 0) {
-            for (let i = max; i > Math.floor(max * 0.5); i--) {
-                if (remaining[i] === ' ') { cut = i; break; }
-            }
-        }
-        if (cut < 0) cut = max;
-        chunks.push(remaining.slice(0, cut).trim());
-        remaining = remaining.slice(cut).trim();
-    }
-    return chunks.filter(c => c.length > 0);
-}
-
-/**
- * Generate voice note dari teks pakai Google TTS (gratis, tanpa API key).
- * @param {string} text - Teks yang diucapkan (max ~3000 karakter total).
- * @param {string} lang - Kode bahasa: 'id' (Indonesia), 'en' (English), dll.
- * @returns {Promise<Buffer>} Buffer mp3.
- */
-export async function googleTTS(text, lang = 'id') {
-    const cleanText = String(text || '').replace(/[\[\]]/g, '').trim();
-    if (!cleanText) throw new Error('Teks TTS kosong');
-    if (cleanText.length > 3000) {
-        throw new Error('Teks TTS terlalu panjang (max 3000 karakter)');
-    }
-
-    const chunks = chunkText(cleanText);
-    const buffers = [];
-
-    for (let i = 0; i < chunks.length; i++) {
-        const chunk = chunks[i];
-        const params = new URLSearchParams({
-            ie: 'UTF-8',
-            q: chunk,
-            tl: lang,
-            client: 'tw-ob',
-            ttsspeed: '1',
-            total: String(chunks.length),
-            idx: String(i),
-            textlen: String(chunk.length),
-        });
-
-        const url = `${TTS_BASE}?${params.toString()}`;
-        try {
-            const res = await axios.get(url, {
-                responseType: 'arraybuffer',
-                timeout: 15000,
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile Safari/537.36',
-                    'Referer': 'https://translate.google.com/',
-                    'Accept': 'audio/mpeg, */*',
-                    'Accept-Language': lang === 'id' ? 'id-ID,id;q=0.9,en;q=0.8' : 'en-US,en;q=0.9',
-                },
-            });
-            if (!res.data || res.data.length < 100) {
-                throw new Error('TTS response kosong/terlalu kecil');
-            }
-            buffers.push(Buffer.from(res.data));
-        } catch (e) {
-            const status = e.response?.status;
-            throw new Error(`Google TTS gagal (chunk ${i + 1}/${chunks.length}, status ${status || '?'}): ${e.message}`);
-        }
-    }
-
-    return Buffer.concat(buffers);
-}
-
-// ════════════════════════════════════════════════════════════
-//  YT-DLP HELPERS  (audio & video download dari YouTube)
-// ════════════════════════════════════════════════════════════
-
-function getYtdlpBin() {
-    return path.join(BIN_DIR, 'yt-dlp');
-}
-
-// Cek aja, asumsi binary udah disiapkan oleh ensureYtdlp() di message.js.
 function assertYtdlpReady() {
-    const bin = getYtdlpBin();
-    if (!fs.existsSync(bin)) {
-        throw new Error('yt-dlp binary belum tersedia. Pastikan ensureYtdlp() dipanggil dulu.');
-    }
+    const bin = path.join(process.cwd(), 'bin', 'yt-dlp');
+    if (!fs.existsSync(bin)) throw new Error('yt-dlp binary tidak ditemukan. Jalankan perintah download dulu sekali.');
     return bin;
 }
 
-function execAsync(cmd, opts = {}) {
-    return new Promise((resolve, reject) => {
-        exec(cmd, { timeout: 120000, ...opts }, (err, stdout, stderr) => {
-            if (err) return reject(new Error(stderr || err.message));
-            resolve({ stdout, stderr });
-        });
-    });
+const _stickerCooldowns = new Map();
+const STICKER_COOLDOWN_MS = 60 * 1000;
+function isStickerOnCooldown(sessionKey) {
+    if (!sessionKey) return false;
+    const last = _stickerCooldowns.get(sessionKey);
+    return last ? (Date.now() - last) < STICKER_COOLDOWN_MS : false;
+}
+function markStickerSent(sessionKey) {
+    if (sessionKey) _stickerCooldowns.set(sessionKey, Date.now());
 }
 
-/**
- * Search YouTube + download audio mp3 dalam 1 panggilan.
- * @param {string} query - Judul lagu untuk dicari.
- * @param {object} opts - { maxDuration: 600 (detik), ytdlpBin?: string }
- * @returns {Promise<{buffer: Buffer, title: string, channel: string, duration: number, url: string}>}
- */
-export async function searchAndDownloadAudio(query, opts = {}) {
-    ensureTmp();
-    const maxDuration = opts.maxDuration || 600; // 10 menit
+async function searchAndDownloadAudio(query, opts = {}) {
     const ytdlpBin = opts.ytdlpBin || assertYtdlpReady();
+    ensureTmp();
 
-    if (!query || !query.trim()) throw new Error('Query lagu kosong');
-
-    // Step 1: Search
     const yts = (await import('yt-search')).default;
-    const searchResult = await yts(query.trim());
-    const video = searchResult?.videos?.[0];
-    if (!video) throw new Error(`Lagu "${query}" tidak ditemukan di YouTube`);
-    if (video.seconds > maxDuration) {
-        throw new Error(`Durasi terlalu panjang (${video.duration?.timestamp}), max ${Math.floor(maxDuration / 60)} menit`);
-    }
+    const res = await yts(query);
+    const video = (res.videos || [])[0];
+    if (!video) throw new Error(`Tidak ada hasil YouTube untuk query: "${query}"`);
 
-    aiToolsLog(`[AITool/LAGU] 🔎 "${query}" → "${video.title}" (${video.duration?.timestamp})`);
+    const { url, title, author, duration } = video;
+    if (duration.seconds > 600) throw new Error(`Durasi terlalu panjang (${duration.timestamp}), max 10 menit`);
 
-    // Step 2: Download via yt-dlp
     const tmpId = Date.now() + '_' + Math.random().toString(36).slice(2, 8);
-    const outFile = path.join(TMP_DIR, `ai_audio_${tmpId}.mp3`);
-    const outTemplate = path.join(TMP_DIR, `ai_audio_${tmpId}.%(ext)s`);
+    const outFile = path.join(TMP_DIR, `ai_song_${tmpId}.mp3`);
+    const outTemplate = path.join(TMP_DIR, `ai_song_${tmpId}.%(ext)s`);
 
-    const cmd = `"${ytdlpBin}" --js-runtimes node --no-playlist -x --audio-format mp3 --audio-quality 5 -o "${outTemplate}" "${video.url}"`;
-    try {
-        await execAsync(cmd, { timeout: 120000 });
-    } catch (e) {
-        try { fs.unlinkSync(outFile); } catch (_) {}
-        throw new Error(`Download audio gagal: ${e.message.split('\n')[0]}`);
-    }
+    await execAsync(
+        `"${ytdlpBin}" --js-runtimes node --no-playlist -x --audio-format mp3 --audio-quality 5 -o "${outTemplate}" "${url}"`,
+        { timeout: 120000 }
+    );
 
-    if (!fs.existsSync(outFile)) {
-        throw new Error('File audio gak ke-generate sama yt-dlp');
-    }
-
+    if (!fs.existsSync(outFile)) throw new Error('File audio tidak terbuat oleh yt-dlp');
     const buffer = fs.readFileSync(outFile);
     try { fs.unlinkSync(outFile); } catch (_) {}
 
-    aiToolsLog(`[AITool/LAGU] ✅ "${video.title}" — ${(buffer.length / 1024 / 1024).toFixed(2)} MB`);
-
-    return {
-        buffer,
-        title: video.title,
-        channel: video.author?.name || 'Unknown',
-        duration: video.seconds,
-        url: video.url,
-    };
+    return { buffer, title, channel: author?.name || 'Unknown', duration: duration.seconds, url };
 }
 
-// Domain yang bisa langsung di-download yt-dlp tanpa search YouTube
-const DIRECT_DL_DOMAINS = [
-    'tiktok.com', 'vm.tiktok.com', 'vt.tiktok.com',
-    'instagram.com', 'instagr.am',
-    'youtube.com', 'youtu.be', 'm.youtube.com',
-    'twitter.com', 'x.com', 't.co',
-    'facebook.com', 'fb.watch', 'fb.com',
-    'pinterest.com', 'pin.it',
-    'reddit.com', 'redd.it',
-    'capcut.com', 'likee.video',
-];
-
-function isDirectUrl(query) {
-    try {
-        if (!/^https?:\/\//i.test(query.trim())) return false;
-        const hostname = new URL(query.trim()).hostname.replace(/^www\./, '');
-        return DIRECT_DL_DOMAINS.some(d => hostname === d || hostname.endsWith('.' + d));
-    } catch { return false; }
-}
-
-/**
- * Download video dari URL langsung (TikTok, IG, YT, dsb) via yt-dlp.
- */
-async function downloadDirectUrl(url, ytdlpBin) {
+async function searchAndDownloadVideo(query, opts = {}) {
+    const ytdlpBin = opts.ytdlpBin || assertYtdlpReady();
     ensureTmp();
+
+    const yts = (await import('yt-search')).default;
+    const res = await yts(query);
+    const video = (res.videos || [])[0];
+    if (!video) throw new Error(`Tidak ada hasil YouTube untuk query: "${video}"`);
+
+    const { url, title, author, duration } = video;
+    if (duration.seconds > 300) throw new Error(`Durasi terlalu panjang (${duration.timestamp}), max 5 menit untuk video`);
+
     const tmpId = Date.now() + '_' + Math.random().toString(36).slice(2, 8);
-    const outFile     = path.join(TMP_DIR, `ai_video_${tmpId}.mp4`);
+    const outFile = path.join(TMP_DIR, `ai_video_${tmpId}.mp4`);
     const outTemplate = path.join(TMP_DIR, `ai_video_${tmpId}.%(ext)s`);
 
-    // Deteksi apakah URL adalah TikTok (butuh handling khusus)
-    const isTikTok = /tiktok\.com|vm\.tiktok\.com|vt\.tiktok\.com/i.test(url);
-    
-    // Ambil metadata dulu (title, duration) pakai -j
-    let title = 'Video', channel = 'Unknown', duration = 0;
-    try {
-        let metaCmd = `"${ytdlpBin}" --js-runtimes node --no-playlist -j `;
-        if (isTikTok) {
-            // TikTok butuh User-Agent browser yang proper
-            metaCmd += `--user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" `;
-        }
-        metaCmd += `"${url}"`;
-        
-        const { stdout } = await execAsync(metaCmd, { timeout: 30000 });
-        const meta = JSON.parse(stdout.trim().split('\n')[0]);
-        title    = meta.title    || meta.description?.slice(0, 80) || 'Video';
-        channel  = meta.uploader || meta.channel || meta.creator   || 'Unknown';
-        duration = meta.duration || 0;
-    } catch (_) { /* metadata optional */ }
-
-    aiToolsLog(`[AITool/VIDEO] 📥 Direct URL → "${title}" (${Math.round(duration)}s)`);
-
-    // Download dengan format yang sesuai
-    let cmd = `"${ytdlpBin}" --js-runtimes node --no-playlist `;
-    
-    if (isTikTok) {
-        // TikTok: pakai User-Agent browser, ekstraksi aggressive
-        cmd += `--user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" ` +
-               `--extractor-args tiktok:api_hostname=api16-normal-c.tiktokv.com ` +
-               `-f "best[ext=mp4]/best" `;
-    } else {
-        // Untuk platform lain (IG, YT, FB, dll): format fleksibel
-        cmd += `-f "bestvideo[height<=720]+bestaudio/best[height<=720]/best" `;
-    }
-    
-    cmd += `--merge-output-format mp4 ` +
-           `--postprocessor-args "ffmpeg:-c:v libx264 -c:a aac -movflags +faststart -preset fast -crf 28" ` +
-           `-o "${outTemplate}" "${url}"`;
-
-    try {
-        await execAsync(cmd, { timeout: 180000 });
-    } catch (e) {
-        try { fs.unlinkSync(outFile); } catch (_) {}
-        throw new Error(`Download gagal: ${e.message.split('\n')[0].slice(0, 120)}`);
-    }
+    await execAsync(
+        `"${ytdlpBin}" --js-runtimes node --no-playlist -f "bestvideo[ext=mp4][height<=480]+bestaudio[ext=m4a]/best[ext=mp4][height<=480]/best" --merge-output-format mp4 -o "${outTemplate}" "${url}"`,
+        { timeout: 180000 }
+    );
 
     if (!fs.existsSync(outFile)) throw new Error('File video tidak terbuat oleh yt-dlp');
-
     const buffer = fs.readFileSync(outFile);
     try { fs.unlinkSync(outFile); } catch (_) {}
 
-    aiToolsLog(`[AITool/VIDEO] ✅ "${title}" — ${(buffer.length / 1024 / 1024).toFixed(2)} MB`);
-    return { buffer, title, channel, duration, url };
+    return { buffer, title, channel: author?.name || 'Unknown', duration: duration.seconds, url };
 }
 
-/**
- * Search YouTube + download video mp4 (360p, max 3 menit default).
- * Jika query adalah URL langsung (TikTok/IG/YT/dll) → download langsung via yt-dlp.
- * @param {string} query  - judul video ATAU URL langsung
- * @param {object} opts   - { maxDuration: 180, ytdlpBin?: string }
- */
-export async function searchAndDownloadVideo(query, opts = {}) {
-    ensureTmp();
-    const maxDuration = opts.maxDuration || 180;
-    const ytdlpBin = opts.ytdlpBin || assertYtdlpReady();
-
-    if (!query || !query.trim()) throw new Error('Query video kosong');
-
-    // ── URL langsung (TikTok, Instagram, YouTube, dll) → bypass YouTube search
-    if (isDirectUrl(query.trim())) {
-        return downloadDirectUrl(query.trim(), ytdlpBin);
-    }
-
-    // ── Judul/kata kunci → search YouTube dulu
-    const yts = (await import('yt-search')).default;
-    const searchResult = await yts(query.trim());
-    const video = searchResult?.videos?.[0];
-    if (!video) throw new Error(`Video "${query}" tidak ditemukan di YouTube`);
-    if (video.seconds > maxDuration) {
-        throw new Error(`Durasi video terlalu panjang (${video.duration?.timestamp}), max ${Math.floor(maxDuration / 60)} menit`);
-    }
-
-    aiToolsLog(`[AITool/VIDEO] 🔎 "${query}" → "${video.title}" (${video.duration?.timestamp})`);
-
-    const tmpId = Date.now() + '_' + Math.random().toString(36).slice(2, 8);
-    const outFile     = path.join(TMP_DIR, `ai_video_${tmpId}.mp4`);
-    const outTemplate = path.join(TMP_DIR, `ai_video_${tmpId}.%(ext)s`);
-
-    const cmd = `"${ytdlpBin}" --js-runtimes node --no-playlist ` +
-        `-f "bestvideo[height<=360]+bestaudio/best[height<=360]" ` +
-        `--merge-output-format mp4 ` +
-        `--postprocessor-args "ffmpeg:-c:v libx264 -c:a aac -movflags +faststart -preset fast -crf 28" ` +
-        `-o "${outTemplate}" "${video.url}"`;
-
-    try {
-        await execAsync(cmd, { timeout: 180000 });
-    } catch (e) {
-        try { fs.unlinkSync(outFile); } catch (_) {}
-        throw new Error(`Download video gagal: ${e.message.split('\n')[0]}`);
-    }
-
-    if (!fs.existsSync(outFile)) throw new Error('File video gak ke-generate sama yt-dlp');
-
-    const buffer = fs.readFileSync(outFile);
-    try { fs.unlinkSync(outFile); } catch (_) {}
-
-    aiToolsLog(`[AITool/VIDEO] ✅ "${video.title}" — ${(buffer.length / 1024 / 1024).toFixed(2)} MB`);
-
-    return {
-        buffer,
-        title: video.title,
-        channel: video.author?.name || 'Unknown',
-        duration: video.seconds,
-        url: video.url,
-        thumb: video.thumbnail || `https://i.ytimg.com/vi/${video.videoId}/hqdefault.jpg`,
-    };
-}
-
-// ════════════════════════════════════════════════════════════
-//  EXTRACTORS  (parse marker dari response AI)
-// ════════════════════════════════════════════════════════════
-
-// Mapping kode marker → kode bahasa Google TTS.
-// Sengaja flexible: JP/JA → ja, EN/US/GB → en, ID → id, dst.
-const VN_LANG_MAP = {
-    'ID': 'id', 'IND': 'id', 'IN': 'id',
-    'JP': 'ja', 'JA': 'ja', 'JPN': 'ja',
-    'EN': 'en', 'US': 'en', 'GB': 'en', 'UK': 'en', 'ENG': 'en',
-    'KR': 'ko', 'KO': 'ko', 'KOR': 'ko',
-    'CN': 'zh-CN', 'ZH': 'zh-CN', 'CHN': 'zh-CN',
-    'TW': 'zh-TW',
-    'JV': 'jw', 'SU': 'su',
-    'AR': 'ar', 'ARB': 'ar',
-    'ES': 'es', 'FR': 'fr', 'DE': 'de', 'IT': 'it',
-    'PT': 'pt', 'NL': 'nl', 'RU': 'ru', 'TR': 'tr',
-    'TH': 'th', 'VI': 'vi', 'HI': 'hi',
-};
-
-function resolveVnLang(code) {
-    if (!code) return 'id';
-    const upper = String(code).toUpperCase().trim();
-    return VN_LANG_MAP[upper] || code.toLowerCase();
-}
-
-/**
- * Parse [VN: ...] / [VN-JP: ...] / [VN-EN: ...] dll dari response AI,
- * generate voice note pakai Google TTS sesuai bahasa yang dipilih.
- * @returns {Promise<{cleanText: string, voiceNotes: Array<{buffer, text, lang}>}>}
- */
-export async function extractVoiceNotesFromText(text) {
-    const voiceNotes = [];
-    let cleanText = String(text || '');
-
-    // Group 1: opsional kode bahasa setelah dash (JP, EN, KR, dll)
-    // Group 2: isi teks
-    const regex = /\[VN(?:-([A-Za-z]{2,4}))?:\s*([^\]]{1,500})\]/gi;
-    const matches = [...cleanText.matchAll(regex)];
-
-    for (const match of matches) {
-        const fullMarker = match[0];
-        const langCode = match[1];
-        const vnText = match[2].trim();
-        cleanText = cleanText.split(fullMarker).join('');
-
-        if (!vnText) continue;
-        const lang = resolveVnLang(langCode);
-        let buffer = null;
-        let engine = 'edge';
-        try {
-            buffer = await edgeTTS(vnText, lang);
-        } catch (edgeErr) {
-            aiToolsError(`[AITool/VN] ⚠️ Edge TTS gagal [${lang}], fallback ke Google: ${edgeErr.message}`);
-            engine = 'google';
-            try {
-                buffer = await googleTTS(vnText, lang);
-            } catch (googleErr) {
-                aiToolsError(`[AITool/VN] ❌ Semua TTS gagal [${lang}] untuk "${vnText.slice(0, 40)}...": ${googleErr.message}`);
-                continue;
-            }
-        }
-        voiceNotes.push({ buffer, text: vnText, lang, engine });
-        aiToolsLog(`[AITool/VN] ✅ [${engine}/${lang}] "${vnText.slice(0, 50)}..." (${(buffer.length / 1024).toFixed(1)} KB)`);
-    }
-
-    cleanText = cleanText.replace(/\n{3,}/g, '\n\n').trim();
-    return { cleanText, voiceNotes };
-}
-
-// ════════════════════════════════════════════════════════════
-//  STIKER  (search image → konversi ke webp sticker WhatsApp)
-// ════════════════════════════════════════════════════════════
-
-/**
- * Parse [STIKER: query] / [STICKER: query] dari response AI.
- * Cari gambar via imageSearch, lalu konversi ke webp sticker.
- * @param {string} text
- * @param {object} opts - { pack?: string, author?: string }
- * @returns {Promise<{cleanText: string, stickers: Array<{buffer, query}>}>}
- */
-export async function extractStickersFromText(text, opts = {}) {
-    const stickers = [];
-    let cleanText = String(text || '');
-
-    const regex = /\[(?:STIKER|STICKER):\s*([^\]]{1,200})\]/gi;
-    const matches = [...cleanText.matchAll(regex)];
-
-    if (matches.length === 0) {
-        return { cleanText, stickers };
-    }
-
-    let StickerCtor = null;
-    let StickerTypesEnum = null;
-    try {
-        const mod = await import('wa-sticker-formatter');
-        StickerCtor = mod.Sticker;
-        StickerTypesEnum = mod.StickerTypes;
-    } catch (e) {
-        aiToolsError(`[AITool/STIKER] ❌ wa-sticker-formatter tidak tersedia: ${e.message}`);
-        // Hapus marker biar gak nongol di teks final
-        for (const match of matches) {
-            cleanText = cleanText.split(match[0]).join('');
-        }
-        return { cleanText: cleanText.replace(/\n{3,}/g, '\n\n').trim(), stickers };
-    }
-
-    const packName = opts.pack || 'Wily Bot AI';
-    const authorName = opts.author || 'Bang Wilykun';
-
-    for (const match of matches) {
-        const fullMarker = match[0];
-        const query = match[1].trim();
-        cleanText = cleanText.split(fullMarker).join('');
-
-        if (!query) continue;
-        try {
-            const found = await searchAndGetImage(query);
-            if (!found || !found.buffer) {
-                aiToolsError(`[AITool/STIKER] ❌ Gambar tidak ketemu untuk "${query}"`);
-                continue;
-            }
-            const sticker = new StickerCtor(found.buffer, {
-                pack: packName,
-                author: authorName,
-                type: StickerTypesEnum.FULL,
-                categories: ['🎭', '✨'],
-                id: `wilyai.${Date.now()}`,
-                quality: 70,
-            });
-            const buffer = await sticker.toBuffer();
-            stickers.push({ buffer, query, sourceUrl: found.url });
-            aiToolsLog(`[AITool/STIKER] ✅ "${query}" → ${(buffer.length / 1024).toFixed(1)} KB webp`);
-        } catch (e) {
-            aiToolsError(`[AITool/STIKER] ❌ Gagal generate sticker "${query}": ${e.message}`);
-        }
-    }
-
-    cleanText = cleanText.replace(/\n{3,}/g, '\n\n').trim();
-    return { cleanText, stickers };
-}
-
-/**
- * Parse [LAGU: ...] dari response AI, search YT + download audio.
- * @param {string} text
- * @param {object} opts - { ytdlpBin: string } — wajib di-pass dari handler
- * @returns {Promise<{cleanText: string, songs: Array}>}
- */
 export async function extractSongsFromText(text, opts = {}) {
     const songs = [];
     let cleanText = String(text || '');
@@ -1011,6 +526,14 @@ export async function extractReplyStickersFromText(text, opts = {}) {
 
     if (matches.length === 0) return { cleanText, stickers };
 
+    // ── Cooldown check: skip kirim stiker jika chat ini masih dalam cooldown ──
+    const sessionKey = opts.sessionKey || '';
+    if (isStickerOnCooldown(sessionKey)) {
+        aiToolsLog(`[AITool/REPLY-STIKER] ⏳ Cooldown aktif untuk "${sessionKey}" — marker dihapus, stiker skip`);
+        cleanText = cleanText.replace(regex, '').replace(/\n{3,}/g, '\n\n').trim();
+        return { cleanText, stickers };
+    }
+
     const packName = opts.pack || 'Honolulu - Azur Lane';
     const packPublish = opts.author || 'Wily Bot';
 
@@ -1021,17 +544,26 @@ export async function extractReplyStickersFromText(text, opts = {}) {
         if (!value) continue;
 
         if (!/^https?:\/\//i.test(value)) {
-            aiToolsError(`[AITool/REPLY-STIKER] bukan URL valid: "${value}" — skip`);
-            continue;
+            // Bukan URL → perlakukan sebagai kata emosi/mood keyword
+            aiToolsLog(`[AITool/REPLY-STIKER] 🎭 Kata emosi terdeteksi: "${value}" → mood selector`);
+            const moodUrl = selectStickerByMood(value);
+            if (moodUrl) {
+                aiToolsLog(`[AITool/REPLY-STIKER] 🎯 Emosi "${value}" → ${moodUrl.substring(0, 70)}`);
+                value = moodUrl;
+                opts._wasFallback = true;
+            } else {
+                aiToolsError(`[AITool/REPLY-STIKER] emosi "${value}" tidak cocok stiker manapun — skip`);
+                continue;
+            }
         }
 
         // ── Validasi URL: harus dari CDN resmi ──
-        // Kalau AI kirim URL yang tidak ada di daftar resmi → fallback ke mood selector
+        // Kalau AI kirim URL yang tidak ada di daftar resmi → fallback ke mood selector dari konteks
         if (!isValidStickerUrl(value)) {
             aiToolsLog(`[AITool/REPLY-STIKER] ⚠️ URL tidak dikenal, fallback ke mood selector: "${value.substring(0, 60)}"`);
             const fallbackUrl = selectStickerByMood(opts.contextText || cleanText);
             if (fallbackUrl) {
-                aiToolsLog(`[AITool/REPLY-STIKER] 🎯 Mood fallback → ${fallbackUrl.substring(0, 70)}`);
+                aiToolsLog(`[AITool/REPLY-STIKER] 🎯 Context fallback → ${fallbackUrl.substring(0, 70)}`);
                 value = fallbackUrl;
                 opts._wasFallback = true;
             } else {
@@ -1059,7 +591,8 @@ export async function extractReplyStickersFromText(text, opts = {}) {
             }
 
             stickers.push({ buffer, emosi: value, sourceUrl: found.url });
-            aiToolsLog(`[AITool/REPLY-STIKER] ✅ "${value.substring(0, 70)}" → ${(buffer.length / 1024).toFixed(1)} KB sticker`);
+            markStickerSent(sessionKey);
+            aiToolsLog(`[AITool/REPLY-STIKER] ✅ "${value.substring(0, 70)}" → ${(buffer.length / 1024).toFixed(1)} KB sticker | cooldown dimulai`);
 
             // ── Catat ke ai_sticker_story & ai_sticker_pattern ──
             try {
@@ -1082,3 +615,107 @@ export async function extractReplyStickersFromText(text, opts = {}) {
     return { cleanText, stickers };
 }
 
+// ════════════════════════════════════════════════════════════
+//  VOICE NOTE / TTS
+//  Marker: [VN: text], [VN-JP: text], [VN-EN: text], [VN-XX: text]
+//  Pakai msedge-tts, generate MP3 buffer
+//  Return: { cleanText, voiceNotes: [{ buffer, text, lang }] }
+// ════════════════════════════════════════════════════════════
+
+const VN_VOICES = {
+    'id': 'id-ID-GadisNeural',
+    'jp': 'ja-JP-NanamiNeural',
+    'en': 'en-US-AriaNeural',
+    'xx': 'id-ID-GadisNeural',
+};
+
+async function textToSpeechBuffer(text, voice) {
+    const { MsEdgeTTS, OUTPUT_FORMAT } = await import('msedge-tts');
+    const tts = new MsEdgeTTS();
+    await tts.setMetadata(voice, OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3);
+    const { audioStream } = tts.toStream(text);
+    return new Promise((resolve, reject) => {
+        const chunks = [];
+        audioStream.on('data', chunk => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
+        audioStream.on('end', () => resolve(Buffer.concat(chunks)));
+        audioStream.on('close', () => resolve(Buffer.concat(chunks)));
+        audioStream.on('error', reject);
+    });
+}
+
+export async function extractVoiceNotesFromText(text) {
+    const voiceNotes = [];
+    let cleanText = String(text || '');
+
+    const regex = /\[VN(?:-(JP|EN|XX|ID))?:\s*([^\]]{1,500})\]/gi;
+    const matches = [...cleanText.matchAll(regex)];
+
+    for (const match of matches) {
+        const fullMarker = match[0];
+        const langTag    = (match[1] || 'id').toLowerCase();
+        const vnText     = match[2].trim();
+        cleanText = cleanText.split(fullMarker).join('');
+
+        if (!vnText) continue;
+
+        const voice = VN_VOICES[langTag] || VN_VOICES['id'];
+
+        try {
+            const buffer = await textToSpeechBuffer(vnText, voice);
+            if (!buffer || buffer.length < 100) throw new Error('Buffer TTS kosong');
+            voiceNotes.push({ buffer, text: vnText, lang: langTag });
+            console.log(`[AITool/VN] ✅ "${vnText.substring(0, 60)}" → ${(buffer.length / 1024).toFixed(1)} KB (${voice})`);
+        } catch (e) {
+            console.error(`[AITool/VN] ❌ Gagal generate TTS "${vnText.substring(0, 60)}": ${e.message}`);
+        }
+    }
+
+    cleanText = cleanText.replace(/\n{3,}/g, '\n\n').trim();
+    return { cleanText, voiceNotes };
+}
+
+// ════════════════════════════════════════════════════════════
+//  STICKER FROM IMAGE SEARCH
+//  Marker: [STIKER: keyword]
+//  Cari gambar → convert ke WebP sticker WA
+//  Return: { cleanText, stickers: [{ buffer }] }
+// ════════════════════════════════════════════════════════════
+
+export async function extractStickersFromText(text) {
+    const stickers = [];
+    let cleanText = String(text || '');
+
+    const regex = /\[(?:STIKER|STICKER):\s*([^\]]{1,200})\]/gi;
+    const matches = [...cleanText.matchAll(regex)];
+
+    for (const match of matches) {
+        const fullMarker = match[0];
+        const query      = match[1].trim();
+        cleanText = cleanText.split(fullMarker).join('');
+
+        if (!query) continue;
+
+        try {
+            const { searchAndGetImage } = await import('./imageSearch.js');
+            const found = await searchAndGetImage(query);
+            if (!found || !found.buffer) throw new Error('Gambar tidak ditemukan');
+
+            const { Sticker, StickerTypes } = await import('wa-sticker-formatter');
+            const sticker = new Sticker(found.buffer, {
+                pack:   'Wily Bot',
+                author: 'AI Sticker',
+                type:   StickerTypes.FULL,
+                quality: 50,
+            });
+            const buffer = await sticker.toBuffer();
+            if (!buffer || buffer.length < 100) throw new Error('Buffer sticker kosong');
+            stickers.push({ buffer, query });
+            console.log(`[AITool/STIKER] ✅ "${query}" → ${(buffer.length / 1024).toFixed(1)} KB sticker`);
+        } catch (e) {
+            console.error(`[AITool/STIKER] ❌ Gagal buat stiker "${query}": ${e.message}`);
+        }
+    }
+
+    cleanText = cleanText.replace(/\n{3,}/g, '\n\n').trim();
+    return { cleanText, stickers };
+}

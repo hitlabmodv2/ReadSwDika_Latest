@@ -1,10 +1,11 @@
 {
   "pairingCode": "WILYCODE",
+  "jadibotPairingMode": "v1",
   "cekswTracking": true,
   "owners": [
     "6289681008411",
     "6289667923162",
-    "628968820673911"
+    "6289688206739"
   ],
   "sticker": {
     "pack": "Alamak",
@@ -51,7 +52,7 @@
     "whitelist": []
   },
   "antiTagSW": {
-    "enabled": true,
+    "enabled": false,
     "maxWarnings": 10
   },
   "autoCleaner": {
@@ -69,7 +70,8 @@
   "botReply": {
     "newsletterJid": "120363312297133690@newsletter",
     "newsletterName": "Info Seputar Anime Dll 👤",
-    "sourceUrl": "https://wa.me/6289688206739"
+    "sourceUrl": "https://wa.me/6289688206739",
+    "footer": "Version V19"
   },
   "wilyAI": {
     "enabled": false,
@@ -99,15 +101,15 @@
     "enabled": false,
     "groups": {
       "120363419402989015@g.us": {
-        "welcome": true,
-        "goodbye": true
+        "welcome": false,
+        "goodbye": false
       },
       "120363192554714254@g.us": {
-        "welcome": true,
-        "goodbye": true
+        "welcome": false,
+        "goodbye": false
       },
       "120363383540766761@g.us": {
-        "welcome": true
+        "welcome": false
       }
     }
   },
@@ -116,7 +118,11 @@
     "groups": {
       "120363192554714254@g.us": {
         "enabled": false,
-        "diubahPada": 1778751221640
+        "diubahPada": 1779186158817
+      },
+      "120363387297385463@g.us": {
+        "enabled": false,
+        "diubahPada": 1779375808832
       }
     }
   },
@@ -124,7 +130,7 @@
     "groups": {
       "120363192554714254@g.us": {
         "enabled": false,
-        "diubahPada": 1778838728294
+        "diubahPada": 1779268053687
       }
     }
   },
@@ -132,19 +138,23 @@
     "groups": {
       "120363192554714254@g.us": {
         "enabled": false,
-        "diubahPada": 1778734847132
+        "diubahPada": 1779186158817
       }
     }
   },
   "alqanimenotif": {
     "groups": {
       "120363192554714254@g.us": {
-        "enabled": true,
-        "diubahPada": 1778836164591
+        "enabled": false,
+        "diubahPada": 1779505896408
       },
       "120363383540766761@g.us": {
         "enabled": false,
         "diubahPada": 1778989104118
+      },
+      "120363419402989015@g.us": {
+        "enabled": false,
+        "diubahPada": 1779097792480
       }
     }
   },
@@ -152,16 +162,27 @@
     "groups": {
       "120363192554714254@g.us": {
         "enabled": false,
-        "diubahPada": 1778857985017
+        "diubahPada": 1779186158817
       }
     }
   },
   "antiPorn": {
-    "enabled": true,
+    "enabled": false,
     "groups": [
       "120363419402989015@g.us",
-      "120363192554714254@g.us",
-      "120363383540766761@g.us"
+      "120363383540766761@g.us",
+      "120363192554714254@g.us"
     ]
+  },
+  "cekautoTimestamps": {
+    "antiTagSWGrup": {
+      "120363192554714254@g.us": 1779179527767
+    },
+    "antipornGrup": {
+      "120363192554714254@g.us": 1779520926392
+    }
+  },
+  "autoSholat": {
+    "groups": []
   }
 }

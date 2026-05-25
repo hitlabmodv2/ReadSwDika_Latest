@@ -1,7 +1,7 @@
 /**
  * ───────────────────────────────
  *  Base Script : Bang Dika Ardnt
- *  Recode By    : Bang Wilykun
+ *  Recode By   : Bang Wilykun
  *  WhatsApp    : 6289688206739
  *  Telegram    : @Wilykun1994
  * ───────────────────────────────
@@ -26,7 +26,7 @@ import os from 'os';
 import { PassThrough } from 'stream';
 import { createRequire } from 'module';
 const _require = createRequire(import.meta.url);
-const { isJidGroup, downloadMediaMessage, getContentType, generateWAMessageFromContent, generateWAMessageContent, prepareWAMessageMedia, proto } = _require('socketon');
+const { isJidGroup, downloadMediaMessage, getContentType, generateWAMessageFromContent, generateWAMessageContent, prepareWAMessageMedia, proto, jidDecode, jidNormalizedUser } = _require('socketon');
 import crypto from 'crypto';
 import { exec } from 'child_process';
 import util from 'util';
@@ -37,16 +37,16 @@ import { getUptimeFormatted, getBotStats } from '../db/botStats.js';
 import { logError, formatErrorReport, clearErrors, generateErrorFileTxt, getInfoErrorTxtPath, getErrorStats } from '../db/errorLog.js';
 import { startJadibot, startJadibotQR, stopJadibot, jadibotMap, jadibotConnectedAt, pendingJadibotChoices, formatPairingCode, maskNumber, parseJadibotDuration, getJadibotExpiry, formatRemainingTime, getJadibotExpirySummary, cleanupExpiredJadibots, removeJadibotExpiry, setPermanentJadibot, ensureJadibotExpiry, extendJadibotExpiry, scheduleJadibotExpiry } from '../helper/jadibot.js';
 import { hasViewOnceCache, getViewOnceCache } from '../helper/voCache.js';
-import { isAntiTagSWEnabled, toggleAntiTagSW, resetWarnings, getWarnings } from './antitagsw.js';
-import { isAntiPornEnabled, toggleAntiPorn, resetAntiPornWarnings, getAntiPornWarnings } from './antiporn.js';
+import { isAntiTagSWEnabled, toggleAntiTagSW, resetWarnings, getWarnings, getAllAntiTagSWGroups } from './antitagsw.js';
+import { isAntiPornEnabled, toggleAntiPorn, resetAntiPornWarnings, getAntiPornWarnings, getAllAntiPornGroups } from './antiporn.js';
 // yg bawah pindah ke sini
 import { injectMessage } from '../helper/inject.js';
 import listenEvent from './event.js';
 import gemini from '../helper/gemini.js';
 import { updateUserName, getUserName } from '../db/userDb.js';
-import { loadUserMemory, detectAndUpdateMemory, clearUserMemory, memoryToReadable } from '../helper/userMemory.js';
+import { loadUserMemory, detectAndUpdateMemory, clearUserMemory, clearAllUserMemory, memoryToReadable } from '../helper/userMemory.js';
 import { searchAndGetImage, searchAndGetImages, extractImagesFromText } from '../helper/imageSearch.js';
-import { extractVoiceNotesFromText, extractSongsFromText, extractVideosFromText, extractStickersFromText, extractReplyStickersFromText, extractTikTokFromText, extractInstagramFromText, extractYouTubeAudioFromText, hasMediaDownloadMarker, hasSocialDLMarker, hasStickerMarker } from '../helper/aiTools.js';
+import { extractSongsFromText, extractVideosFromText, extractReplyStickersFromText, extractTikTokFromText, extractInstagramFromText, extractYouTubeAudioFromText, hasMediaDownloadMarker, hasSocialDLMarker, hasStickerMarker, extractVoiceNotesFromText, extractStickersFromText } from '../helper/aiTools.js';
 import { getHistory, addToHistory, clearHistory, clearAllHistory, countHistory, getSessionKey, buildHistoryMeta, wrapCurrentUserMessage } from '../db/aiHistory.js';
 import { kvGet } from '../db/datadb.js';
 import { sendAIReply } from '../helper/aiReact.js';
@@ -698,10 +698,13 @@ async function buildSmartImageHistoryReply({ userQuestion, query, images = [], c
 }
 
 const pendingPlayChoices = new Map();
+const pendingMusikaiCache  = new Map(); // key → { results, params, ts }
+const pendingMusikai2Cache = new Map(); // key → { results, params, ts } (musikai2)
 const pendingAlqDlChoices = new Map();
 const pendingAlqUpdateChoices = new Map();
 const pendingCosplayChoices = new Map();
 const pendingKomikChoices = new Map();
+const pendingCredsJson    = new Map(); // sender → { nomor, expiresAt, timeout }
 const aiReplyCooldown = new Map(); // sender → last reply timestamp
 const AI_COOLDOWN_MS = 3000; // 3 detik cooldown per user
 
@@ -1290,6 +1293,501 @@ function isViewOnceMessage(quotedMsg) {
         return false;
 }
 
+const CEKAUTO_FITUR_LIST = [
+        { key: 'antiCall',       nama: 'Anti Call',        cmd: '.anticall on/off',        type: 'global', toggleKey: 'antiCall',       toggleable: true  },
+        { key: 'antiCallVideo',  nama: 'Anti Call Video',  cmd: '.anticallvid on/off',     type: 'global', toggleKey: 'antiCallVideo',  toggleable: true  },
+        { key: 'antiDelete',     nama: 'Anti Delete',      cmd: '.antidel on/off',         type: 'global', toggleKey: 'antiDelete',     toggleable: true  },
+        { key: 'antiTagSW',      nama: 'Anti Tag SW',      cmd: '.antitagsw on/off',       type: 'global', toggleKey: 'antiTagSW',      toggleable: true  },
+        { key: 'autoCleaner',    nama: 'Auto Cleaner',     cmd: '.autocleaner on/off',     type: 'global', toggleKey: 'autoCleaner',    toggleable: true  },
+        { key: 'autoOnline',     nama: 'Auto Online',      cmd: '.online on/off',          type: 'global', toggleKey: 'autoOnline',     toggleable: true  },
+        { key: 'autoReadStory',  nama: 'Auto Read Story',  cmd: '.readsw on/off',          type: 'global', toggleKey: 'autoReadStory',  toggleable: true  },
+        { key: 'autoRecording',  nama: 'Auto Recording',   cmd: '.recording on/off',       type: 'global', toggleKey: 'autoRecording',  toggleable: true  },
+        { key: 'autoSimi',       nama: 'Auto Simi (AI)',   cmd: '.simi on/off',            type: 'global', toggleKey: 'autoSimi',       toggleable: true  },
+        { key: 'autoTyping',     nama: 'Auto Typing',      cmd: '.typing on/off',          type: 'global', toggleKey: 'autoTyping',     toggleable: true  },
+        { key: 'infowibu',       nama: 'Info Wibu',        cmd: '.infowibu on/off',        type: 'group',  toggleable: false             },
+        { key: 'memoryMonitor',  nama: 'Memory Monitor',   cmd: '.ram',                    type: 'global', toggleable: false             },
+        { key: 'reactApi',       nama: 'React API',        cmd: '.setreactapi on/off',     type: 'global', toggleKey: 'reactApi',       toggleable: true  },
+        { key: 'sessionCleaner', nama: 'Session Cleaner',  cmd: '.sessioncleaner on/off',  type: 'global', toggleKey: 'sessionCleaner', toggleable: true  },
+        { key: 'telegram',       nama: 'Telegram Bridge',  cmd: '.telegram on/off',        type: 'global', toggleKey: 'telegram',       toggleable: true  },
+        { key: 'welcomeGoodbye', nama: 'Welcome/Goodbye',  cmd: '.welcome on/off',         type: 'global', toggleable: false             },
+        { key: 'wilyAI',         nama: 'Wily AI',          cmd: '.wilyai on/off',          type: 'global', toggleKey: 'wilyAI',         toggleable: true  },
+        { key: 'antiPorn',       nama: 'Anti Porn',        cmd: '.antiporn global on/off', type: 'global', toggleKey: 'antiPorn',       toggleable: true,  checkFn: (cfg) => cfg.antiPorn?.enabled === true || (Array.isArray(cfg.antiPorn?.groups) && cfg.antiPorn.groups.length > 0) },
+        { key: 'cekswTracking',  nama: 'Cek SW Tracking',  cmd: '.ceksw on/off',           type: 'custom', toggleKey: 'cekswTracking',  toggleable: true,  checkFn: (cfg) => cfg.cekswTracking !== false },
+        { key: 'alqanimenotif',  nama: 'Alqanime Notif',   cmd: '.alqanimenotif on/off',   type: 'group',  toggleable: false             },
+        { key: 'animasu',        nama: 'Animasu Notif',    cmd: '.animasu on/off',         type: 'group',  toggleable: false             },
+        { key: 'malnews',        nama: 'MAL News',         cmd: '.malnews on/off',         type: 'group',  toggleable: false             },
+        { key: 'tvonenews',      nama: 'TV One News',      cmd: '.tvone on/off',           type: 'group',  toggleable: false             },
+        { key: 'autoSholat',     nama: 'Auto Sholat',      cmd: '.autosholat add/remove',  type: 'group',  toggleable: false, checkFn: (cfg) => Array.isArray(cfg.autoSholat?.groups) && cfg.autoSholat.groups.length > 0 },
+];
+
+const CEKAUTO_GROUP_FITUR_LIST = [
+        {
+                key: 'infowibu', nama: 'Info Wibu', cmd: '.infowibu on/off', toggleable: true,
+                desc: 'Kirim info & jadwal anime/wibu terbaru ke grup ini secara otomatis.',
+                checkFn: (cfg, jid) => cfg.infowibu?.groups?.[jid]?.enabled === true
+        },
+        {
+                key: 'animasu', nama: 'Animasu Notif', cmd: '.animasu on/off', toggleable: true,
+                desc: 'Notifikasi update episode anime terbaru dari Animasu ke grup.',
+                checkFn: (cfg, jid) => cfg.animasu?.groups?.[jid]?.enabled === true
+        },
+        {
+                key: 'alqanimenotif', nama: 'Alqanime Notif', cmd: '.alqanimenotif on/off', toggleable: true,
+                desc: 'Notifikasi rilis anime terbaru dari Alqanime ke grup ini.',
+                checkFn: (cfg, jid) => cfg.alqanimenotif?.groups?.[jid]?.enabled === true
+        },
+        {
+                key: 'tvonenews', nama: 'TV One News', cmd: '.tvone on/off', toggleable: true,
+                desc: 'Kirim berita terkini dari TV One ke grup ini secara otomatis.',
+                checkFn: (cfg, jid) => cfg.tvonenews?.groups?.[jid]?.enabled === true
+        },
+        {
+                key: 'malnews', nama: 'MAL News', cmd: '.malnews on/off', toggleable: true,
+                desc: 'Kirim berita & update anime/manga dari MyAnimeList ke grup.',
+                checkFn: (cfg, jid) => cfg.malnews?.groups?.[jid]?.enabled === true
+        },
+        {
+                key: 'welcome', nama: 'Welcome', cmd: '.welcome on/off', toggleable: true,
+                desc: 'Kirim pesan sambutan otomatis saat member baru bergabung ke grup.',
+                checkFn: (cfg, jid) => cfg.welcomeGoodbye?.groups?.[jid]?.welcome === true
+        },
+        {
+                key: 'goodbye', nama: 'Goodbye', cmd: '.goodbye on/off', toggleable: true,
+                desc: 'Kirim pesan perpisahan otomatis saat member keluar atau dikick.',
+                checkFn: (cfg, jid) => cfg.welcomeGoodbye?.groups?.[jid]?.goodbye === true
+        },
+        {
+                key: 'antipornGrup', nama: 'Anti Porn (Grup)', cmd: '.antiporn on/off', toggleable: true,
+                descFn: (cfg) => {
+                        const globalOn = cfg.antiPorn?.enabled === true;
+                        return `Hapus konten +18 di grup. Global: ${globalOn ? '🟢 Aktif' : '🔴 Nonaktif → ketik .antiporn global on'}`;
+                },
+                checkFn: (cfg, jid) => Array.isArray(cfg.antiPorn?.groups) && cfg.antiPorn.groups.includes(jid)
+        },
+        {
+                key: 'antiTagSWGrup', nama: 'Anti Tag SW (Grup)', cmd: '.antitagsw on/off', toggleable: true,
+                descFn: (cfg) => {
+                        const globalOn = cfg.antiTagSW?.enabled === true;
+                        return `Cegah member mentag grup via SW. Global: ${globalOn ? '🟢 Aktif' : '🔴 Nonaktif → ketik .antitagsw global on'}`;
+                },
+                checkFn: (_cfg, jid) => isAntiTagSWEnabled(jid)
+        },
+        {
+                key: 'autoSholat', nama: 'Auto Sholat', cmd: '.autosholat add/remove', toggleable: true,
+                desc: 'Kirim notif waktu sholat + gambar masjid + suara adzan ke grup otomatis.',
+                checkFn: (cfg, jid) => Array.isArray(cfg.autoSholat?.groups) && cfg.autoSholat.groups.includes(jid)
+        },
+];
+
+function getFeatureTimestamp(featureKey, jid) {
+        const cfg = loadConfig();
+        if (['infowibu', 'animasu', 'alqanimenotif', 'tvonenews', 'malnews'].includes(featureKey)) {
+                return cfg[featureKey]?.groups?.[jid]?.diubahPada || cfg.cekautoTimestamps?.[featureKey]?.[jid] || null;
+        }
+        return cfg.cekautoTimestamps?.[featureKey]?.[jid] || null;
+}
+
+function saveCekautoTimestamp(featureKey, jid) {
+        const cfg = loadConfig();
+        if (!cfg.cekautoTimestamps) cfg.cekautoTimestamps = {};
+        if (!cfg.cekautoTimestamps[featureKey]) cfg.cekautoTimestamps[featureKey] = {};
+        cfg.cekautoTimestamps[featureKey][jid] = Date.now();
+        saveConfig(cfg);
+}
+
+async function sendConfirmWithButtons(hisoka, m, txt, buttons, opts = {}) {
+        const quoteSource = (opts.quoteBot && m.quoted?.key?.id) ? m.quoted : m;
+        const contextInfo = quoteSource.key?.id ? {
+                stanzaId: quoteSource.key.id,
+                participant: quoteSource.sender || quoteSource.key?.participant || quoteSource.key?.remoteJid || '',
+                quotedMessage: quoteSource.raw || quoteSource.message || {},
+        } : {};
+        let sent = false;
+        try {
+                const msg = generateWAMessageFromContent(
+                        m.from,
+                        {
+                                viewOnceMessage: {
+                                        message: {
+                                                messageContextInfo: { deviceListMetadata: {}, deviceListMetadataVersion: 2 },
+                                                interactiveMessage: {
+                                                        contextInfo,
+                                                        body: { text: txt },
+                                                        nativeFlowMessage: {
+                                                                buttons: buttons.map(b => ({
+                                                                        name: 'quick_reply',
+                                                                        buttonParamsJson: JSON.stringify({ display_text: b.text, id: b.id })
+                                                                }))
+                                                        }
+                                                }
+                                        }
+                                }
+                        },
+                        {},
+                        {}
+                );
+                await hisoka.relayMessage(msg.key.remoteJid, msg.message, { messageId: msg.key.id });
+                sent = true;
+        } catch (_) {}
+        if (!sent) await tolak(hisoka, m, txt);
+}
+
+async function sendAudioWithButtons(hisoka, m, audioBuf, bodyTxt, rows, opts = {}) {
+        const quoteSource = (opts.quoteBot && m.quoted?.key?.id) ? m.quoted : m;
+        const contextInfo = quoteSource.key?.id ? {
+                stanzaId: quoteSource.key.id,
+                participant: quoteSource.sender || quoteSource.key?.participant || quoteSource.key?.remoteJid || '',
+                quotedMessage: quoteSource.raw || quoteSource.message || {},
+        } : {};
+        const fileName = opts.fileName || 'audio.mp3';
+        const listTitle = opts.listTitle || '🎵 Pilih Aksi';
+        const sectionTitle = opts.sectionTitle || 'Opsi';
+        // Dukung multi-section (opts.sections) atau single section dari rows + sectionTitle
+        const sections = opts.sections || [{ title: sectionTitle, rows }];
+        const coverBuf = opts.coverBuf || null;
+        const noAudio = opts.noAudio || false;
+
+        // Kirim audio dulu sebagai file terpisah (kecuali noAudio = true)
+        if (!noAudio && audioBuf) {
+                await hisoka.sendMessage(m.from, {
+                        audio: audioBuf,
+                        mimetype: 'audio/mpeg',
+                        ptt: false,
+                        fileName,
+                }, { quoted: m }).catch(() => {});
+        }
+
+        // Lalu kirim cover + info + button dalam SATU pesan interaktif
+        let sent = false;
+        try {
+                const headerMedia = coverBuf
+                        ? await prepareWAMessageMedia({ image: coverBuf }, { upload: hisoka.waUploadToServer })
+                        : null;
+                const msg = generateWAMessageFromContent(
+                        m.from,
+                        {
+                                viewOnceMessage: {
+                                        message: {
+                                                messageContextInfo: { deviceListMetadata: {}, deviceListMetadataVersion: 2 },
+                                                interactiveMessage: {
+                                                        contextInfo,
+                                                        ...(headerMedia ? { header: { hasMediaAttachment: true, ...headerMedia } } : {}),
+                                                        body: { text: bodyTxt },
+                                                        nativeFlowMessage: {
+                                                                buttons: [
+                                                                        {
+                                                                                name: 'single_select',
+                                                                                buttonParamsJson: JSON.stringify({ title: listTitle, sections })
+                                                                        }
+                                                                ]
+                                                        }
+                                                }
+                                        }
+                                }
+                        },
+                        {},
+                        {}
+                );
+                await hisoka.relayMessage(msg.key.remoteJid, msg.message, { messageId: msg.key.id });
+                sent = true;
+        } catch (_) {}
+        if (!sent) await tolak(hisoka, m, bodyTxt);
+}
+
+function formatRelativeTime(ts) {
+        if (!ts) return null;
+        const diff = Date.now() - ts;
+        const days = Math.floor(diff / 86400000);
+        const hours = Math.floor(diff / 3600000);
+        const mins = Math.floor(diff / 60000);
+        if (days >= 1) return `${days} hari lalu`;
+        if (hours >= 1) return `${hours} jam lalu`;
+        if (mins >= 1) return `${mins} menit lalu`;
+        return 'baru saja';
+}
+
+function getActiveGroupsForFeature(featureKey) {
+        const cfg = loadConfig();
+        if (featureKey === 'welcome') {
+                return Object.entries(cfg.welcomeGoodbye?.groups || {})
+                        .filter(([, v]) => v?.welcome === true).map(([jid]) => jid);
+        }
+        if (featureKey === 'goodbye') {
+                return Object.entries(cfg.welcomeGoodbye?.groups || {})
+                        .filter(([, v]) => v?.goodbye === true).map(([jid]) => jid);
+        }
+        if (featureKey === 'antipornGrup') return getAllAntiPornGroups();
+        if (featureKey === 'antiTagSWGrup') return getAllAntiTagSWGroups();
+        return Object.entries(cfg[featureKey]?.groups || {})
+                .filter(([, v]) => v?.enabled === true).map(([jid]) => jid);
+}
+
+function disableFeatureForGroup(featureKey, jid) {
+        const cfg = loadConfig();
+        if (featureKey === 'welcome' || featureKey === 'goodbye') {
+                if (!cfg.welcomeGoodbye) cfg.welcomeGoodbye = { enabled: true, groups: {} };
+                if (!cfg.welcomeGoodbye.groups) cfg.welcomeGoodbye.groups = {};
+                if (!cfg.welcomeGoodbye.groups[jid]) cfg.welcomeGoodbye.groups[jid] = {};
+                cfg.welcomeGoodbye.groups[jid][featureKey] = false;
+                saveConfig(cfg);
+        } else if (featureKey === 'antipornGrup') {
+                toggleAntiPorn(jid, false);
+        } else if (featureKey === 'antiTagSWGrup') {
+                toggleAntiTagSW(jid, false);
+        } else {
+                if (!cfg[featureKey]) cfg[featureKey] = { groups: {} };
+                if (!cfg[featureKey].groups) cfg[featureKey].groups = {};
+                cfg[featureKey].groups[jid] = { enabled: false, diubahPada: Date.now() };
+                saveConfig(cfg);
+        }
+}
+
+function disableFeatureForAllGroups(featureKey) {
+        const groups = getActiveGroupsForFeature(featureKey);
+        for (const jid of groups) disableFeatureForGroup(featureKey, jid);
+}
+
+async function sendCekautoGrupSelectMsg(hisoka, m, featureKey) {
+        const namaMapSel = {
+                infowibu: 'Info Wibu', animasu: 'Animasu Notif',
+                alqanimenotif: 'Alqanime Notif', tvonenews: 'TV One News',
+                malnews: 'MAL News', welcome: 'Welcome',
+                goodbye: 'Goodbye', antipornGrup: 'Anti Porn (Grup)',
+                antiTagSWGrup: 'Anti Tag SW (Grup)',
+        };
+        const namFitur = namaMapSel[featureKey] || featureKey;
+        const activeJids = getActiveGroupsForFeature(featureKey);
+
+        if (activeJids.length === 0) {
+                return sendConfirmWithButtons(hisoka, m,
+                        `ℹ️ Tidak ada grup yang aktif untuk fitur *${namFitur}*.`,
+                        [{ text: '🏘️ Lihat Fitur GC', id: '__cekauto_gc__' }]
+                );
+        }
+
+        const resolveAdminName = (p) => {
+                let realJid = p.id || '';
+                if (realJid.endsWith('@lid')) {
+                        const pn = p.phoneNumber || p.jid || '';
+                        if (pn && !pn.endsWith('@lid')) realJid = jidNormalizedUser(pn);
+                } else if (realJid) {
+                        realJid = jidNormalizedUser(realJid);
+                }
+                const numOnly = jidDecode(realJid)?.user || realJid.split('@')[0];
+                let name = hisoka.getName
+                        ? (hisoka.getName(realJid, true) || hisoka.getName(realJid) || null)
+                        : null;
+                if (!name || name === numOnly) {
+                        const contact = hisoka.contacts?.read ? hisoka.contacts.read(realJid) : null;
+                        name = contact?.name || contact?.notify || contact?.verifiedName || null;
+                }
+                return name || `+${numOnly}`;
+        };
+
+        const grupRows = [];
+        for (const jid of activeJids) {
+                try {
+                        const meta = await hisoka.groupMetadata(jid);
+                        const memberCount = meta.participants?.length || 0;
+                        const adminNames = (meta.participants || [])
+                                .filter(p => p.admin)
+                                .map(p => resolveAdminName(p));
+                        const adminText = adminNames.length
+                                ? `Admin: ${adminNames.slice(0, 3).join(', ')}${adminNames.length > 3 ? ` +${adminNames.length - 3} lainnya` : ''}`
+                                : 'Tidak ada admin';
+                        const ts = getFeatureTimestamp(featureKey, jid);
+                        const tsText = ts ? ` • Aktif ${formatRelativeTime(ts)}` : '';
+                        grupRows.push({
+                                header: `🏘️ ${meta.subject || jid}`,
+                                title: `👥 ${memberCount} member${tsText}`,
+                                description: adminText,
+                                id: `__cgrupoff__${featureKey}__${jid}`
+                        });
+                } catch (_) {
+                        grupRows.push({
+                                header: `🏘️ ${jid}`,
+                                title: '⚠️ Gagal ambil info grup',
+                                description: jid,
+                                id: `__cgrupoff__${featureKey}__${jid}`
+                        });
+                }
+        }
+
+        const sections = [
+                { title: `🏘️ Pilih Grup — Nonaktifkan ${namFitur}`, rows: grupRows },
+                {
+                        title: '⚠️ Opsi Lainnya',
+                        rows: [{
+                                header: '🔴 Off Semua Grup',
+                                title: `Matikan ${namFitur} di semua ${activeJids.length} grup`,
+                                description: 'Nonaktifkan sekaligus untuk semua grup aktif',
+                                id: `__cgrupall__${featureKey}`
+                        }]
+                }
+        ];
+
+        let txt =
+                `╔══════════════════════════╗\n` +
+                `║  🏘️  *PILIH GRUP*  ║\n` +
+                `╚══════════════════════════╝\n\n` +
+                `Fitur: *${namFitur}*\n` +
+                `Aktif di *${activeJids.length}* grup\n\n` +
+                `Pilih grup yang ingin di-nonaktifkan,\natau pilih *Off Semua Grup* untuk sekaligus.\n\n` +
+                `┌─────────────────────────────┐\n` +
+                `│  🟢 *Grup Aktif*\n` +
+                `└─────────────────────────────┘\n` +
+                grupRows.map(r => `  🏘️  *${r.header.replace('🏘️ ', '')}*\n     _↳ ${r.title} · ${r.description}_`).join('\n') + '\n\n' +
+                `_Gunakan tombol di bawah untuk memilih_`;
+
+        const replyCtx = m.key?.id ? {
+                stanzaId: m.key.id,
+                participant: m.sender || m.key?.participant || '',
+                quotedMessage: m.message || {},
+        } : {};
+
+        let botPpMedia = {};
+        try {
+                const botJid = hisoka.user?.id;
+                if (botJid) {
+                        const ppUrl = await hisoka.profilePictureUrl(botJid, 'image');
+                        if (ppUrl) {
+                                botPpMedia = await prepareWAMessageMedia(
+                                        { image: { url: ppUrl } },
+                                        { upload: hisoka.waUploadToServer }
+                                );
+                        }
+                }
+        } catch (_) {}
+
+        const hasPp = Object.keys(botPpMedia).length > 0;
+        const selMsg = generateWAMessageFromContent(
+                m.from,
+                {
+                        viewOnceMessage: {
+                                message: {
+                                        messageContextInfo: { deviceListMetadata: {}, deviceListMetadataVersion: 2 },
+                                        interactiveMessage: {
+                                                contextInfo: replyCtx,
+                                                ...(hasPp ? { header: { hasMediaAttachment: true, ...botPpMedia } } : {}),
+                                                body: { text: txt },
+                                                nativeFlowMessage: {
+                                                        buttons: [
+                                                                {
+                                                                        name: 'single_select',
+                                                                        buttonParamsJson: JSON.stringify({ title: '🏘️ Pilih Grup', sections })
+                                                                },
+                                                                {
+                                                                        name: 'quick_reply',
+                                                                        buttonParamsJson: JSON.stringify({ display_text: '🏘️ Lihat Fitur GC', id: '__cekauto_gc__' })
+                                                                }
+                                                        ]
+                                                }
+                                        }
+                                }
+                        }
+                },
+                {},
+                {}
+        );
+        await hisoka.relayMessage(selMsg.key.remoteJid, selMsg.message, { messageId: selMsg.key.id });
+}
+
+async function sendCekautoGrupMsg(hisoka, m) {
+        if (!m.isGroup) return m.reply('❌ Perintah ini hanya bisa digunakan di dalam grup!');
+        const cfg = loadConfig();
+        const jid = m.from;
+
+        const totalAktif = CEKAUTO_GROUP_FITUR_LIST.filter(f => f.checkFn(cfg, jid)).length;
+        const totalMati  = CEKAUTO_GROUP_FITUR_LIST.length - totalAktif;
+
+        const allGrupFitur = CEKAUTO_GROUP_FITUR_LIST;
+        const aktifGrup   = allGrupFitur.filter(f => f.checkFn(cfg, jid));
+        const nonaktifGrup = allGrupFitur.filter(f => !f.checkFn(cfg, jid));
+        aktifGrup.sort((a, b) => a.nama.localeCompare(b.nama));
+        nonaktifGrup.sort((a, b) => a.nama.localeCompare(b.nama));
+
+        let txt =
+                `╔══════════════════════════╗\n` +
+                `║  🏘️  *FITUR GRUP*  ║\n` +
+                `╚══════════════════════════╝\n\n` +
+                `┌─────────────────────────────┐\n` +
+                `│  ✅ *AKTIF*  ·  ${totalAktif} fitur aktif\n` +
+                `└─────────────────────────────┘\n` +
+                (aktifGrup.length
+                        ? aktifGrup.map(f => `  🟢  *${f.nama}*`).join('\n') + '\n'
+                        : `  _Tidak ada fitur yang aktif_\n`) +
+                `\n┌─────────────────────────────┐\n` +
+                `│  ❌ *NONAKTIF*  ·  ${totalMati} fitur mati\n` +
+                `└─────────────────────────────┘\n` +
+                (nonaktifGrup.length
+                        ? nonaktifGrup.map(f => `  🔴  *${f.nama}*`).join('\n') + '\n'
+                        : `  _Semua fitur aktif_ ✨\n`) +
+                `\n╔══════════════════════════╗\n` +
+                `║  📦 *Total* : ${CEKAUTO_GROUP_FITUR_LIST.length} fitur terdaftar\n` +
+                `╚══════════════════════════╝\n\n` +
+                `┌─────────────────────────────┐\n` +
+                `│  📋 *DAFTAR PERINTAH*\n` +
+                `└─────────────────────────────┘\n` +
+                [...CEKAUTO_GROUP_FITUR_LIST]
+                        .sort((a, b) => a.nama.localeCompare(b.nama))
+                        .map(f => `  • *${f.nama}* → \`${f.cmd}\``)
+                        .join('\n');
+
+        await m.reply(txt);
+}
+
+async function sendCekautoMsg(hisoka, m) {
+        const cfg = loadConfig();
+        const aktif = [];
+        const nonaktif = [];
+
+        for (const f of CEKAUTO_FITUR_LIST) {
+                const val = cfg[f.key];
+                let isOn = false;
+                if (f.checkFn) {
+                        isOn = f.checkFn(cfg);
+                } else if (f.type === 'global') {
+                        isOn = val?.enabled === true;
+                } else {
+                        const groups = val?.groups || {};
+                        isOn = Object.values(groups).some(g => g?.enabled === true);
+                }
+                (isOn ? aktif : nonaktif).push({ nama: f.nama, cmd: f.cmd, key: f.key });
+        }
+
+        aktif.sort((a, b) => a.nama.localeCompare(b.nama));
+        nonaktif.sort((a, b) => a.nama.localeCompare(b.nama));
+
+        let txt =
+                `╔══════════════════════════╗\n` +
+                `║  ⚙️  *AUTO FITUR BOT*  ║\n` +
+                `╚══════════════════════════╝\n\n`;
+        txt += `┌─────────────────────────────┐\n`;
+        txt += `│  ✅ *AKTIF*  ·  ${aktif.length} fitur aktif\n`;
+        txt += `└─────────────────────────────┘\n`;
+        txt += aktif.length
+                ? aktif.map(f => `  🟢  *${f.nama}*`).join('\n') + '\n'
+                : `  _Tidak ada fitur yang aktif_\n`;
+        txt += `\n┌─────────────────────────────┐\n`;
+        txt += `│  ❌ *NONAKTIF*  ·  ${nonaktif.length} fitur mati\n`;
+        txt += `└─────────────────────────────┘\n`;
+        txt += nonaktif.length
+                ? nonaktif.map(f => `  🔴  *${f.nama}*`).join('\n') + '\n'
+                : `  _Semua fitur aktif_ ✨\n`;
+        txt += `\n╔══════════════════════════╗\n`;
+        txt += `║  📦 *Total* : ${CEKAUTO_FITUR_LIST.length} fitur terdaftar\n`;
+        txt += `╚══════════════════════════╝\n\n`;
+        txt += `┌─────────────────────────────┐\n`;
+        txt += `│  📋 *DAFTAR PERINTAH*\n`;
+        txt += `└─────────────────────────────┘\n`;
+        txt += [...CEKAUTO_FITUR_LIST]
+                .sort((a, b) => a.nama.localeCompare(b.nama))
+                .map(f => `  • *${f.nama}* → \`${f.cmd}\``)
+                .join('\n');
+
+        await m.reply(txt);
+}
+
 export default async function ({ message, type: messagesType }, hisoka) {
         let m;
         try {
@@ -1507,7 +2005,6 @@ export default async function ({ message, type: messagesType }, hisoka) {
                                                 }
 
                                                 let response;
-                                                const fullPrompt = systemPrompt + '\n\n' + userMessage;
 
                                                 if (imageBuffer && imageBuffer.length > 0) {
                                                         // Konversi webp (sticker) ke jpeg agar Gemini bisa baca
@@ -1520,9 +2017,25 @@ export default async function ({ message, type: messagesType }, hisoka) {
                                                                         finalMime = 'image/jpeg';
                                                                 } catch (_) {}
                                                         }
-                                                        response = await gemini.askWithImage(fullPrompt, finalBuffer, finalMime);
+                                                        const autoVContents = [
+                                                                { role: 'user', parts: [{ text: systemPrompt }] },
+                                                                { role: 'model', parts: [{ text: `Siap Shikikan~ Honolulu di sini! ✨` }] },
+                                                                { role: 'user', parts: [
+                                                                        { inlineData: { mimeType: finalMime, data: finalBuffer.toString('base64') } },
+                                                                        { text: userMessage || 'Analisis gambar/sticker ini.' },
+                                                                ]},
+                                                        ];
+                                                        const autoVModels = ['gemini-flash-latest', 'gemini-2.5-flash', 'gemini-pro-latest'];
+                                                        for (const model of autoVModels) {
+                                                                try { response = await gemini.chat({ model, contents: autoVContents }); break; } catch (_) {}
+                                                        }
                                                 } else {
-                                                        response = await gemini.ask(fullPrompt);
+                                                        const autoContents = [
+                                                                { role: 'user', parts: [{ text: systemPrompt }] },
+                                                                { role: 'model', parts: [{ text: `Siap Shikikan~ Honolulu di sini! ✨` }] },
+                                                                { role: 'user', parts: [{ text: userMessage }] },
+                                                        ];
+                                                        response = await gemini.chat({ contents: autoContents });
                                                 }
 
                                                 if (response && response.trim()) {
@@ -1814,12 +2327,16 @@ export default async function ({ message, type: messagesType }, hisoka) {
                                                 if (histMsgs.length > 0) {
                                                         contents = [
                                                                 { role: 'user', parts: [{ text: systemPrompt }] },
-                                                                { role: 'model', parts: [{ text: `Halo ${userName}! Aku Wily Bot, siap membantu 🤖` }] },
+                                                                { role: 'model', parts: [{ text: `Siap Shikikan~ Honolulu di sini, siap membantu! ehehe ✨` }] },
                                                                 ...histMsgs,
                                                                 { role: 'user', parts: [{ text: wrapCurrentUserMessage(userMessage, currentMsgMeta) }] },
                                                         ];
                                                 } else {
-                                                        contents = [{ role: 'user', parts: [{ text: systemPrompt + '\n\n' + userMessage }] }];
+                                                        contents = [
+                                                                { role: 'user', parts: [{ text: systemPrompt }] },
+                                                                { role: 'model', parts: [{ text: `Siap Shikikan~ Honolulu di sini! ✨` }] },
+                                                                { role: 'user', parts: [{ text: userMessage }] },
+                                                        ];
                                                 }
 
                                                 // Bangun teks tambahan konteks untuk vision model pada skenario image-reply
@@ -1857,22 +2374,32 @@ export default async function ({ message, type: messagesType }, hisoka) {
                                                                                 finalMime = 'image/jpeg';
                                                                         } catch (_) {}
                                                                 }
+                                                                const vModels = ['gemini-flash-latest', 'gemini-2.5-flash', 'gemini-pro-latest'];
                                                                 if (histMsgs.length > 0) {
                                                                         const vContents = [
                                                                                 { role: 'user', parts: [{ text: systemPrompt }] },
-                                                                                { role: 'model', parts: [{ text: `Halo ${userName}! Aku Wily Bot 🤖` }] },
+                                                                                { role: 'model', parts: [{ text: `Siap Shikikan~ Honolulu di sini, siap membantu! ehehe ✨` }] },
                                                                                 ...histMsgs,
                                                                                 { role: 'user', parts: [
                                                                                         { inlineData: { mimeType: finalMime, data: finalBuffer.toString('base64') } },
                                                                                         { text: wrapCurrentUserMessage(visionContextText, currentMsgMeta) },
                                                                                 ]},
                                                                         ];
-                                                                        const models = ['gemini-flash-latest', 'gemini-2.5-flash', 'gemini-pro-latest'];
-                                                                        for (const model of models) {
+                                                                        for (const model of vModels) {
                                                                                 try { response = await gemini.chat({ model, contents: vContents }); break; } catch (_) {}
                                                                         }
                                                                 } else {
-                                                                        response = await gemini.askWithImage(systemPrompt + '\n\n' + visionContextText, finalBuffer, finalMime);
+                                                                        const vContentsNoHist = [
+                                                                                { role: 'user', parts: [{ text: systemPrompt }] },
+                                                                                { role: 'model', parts: [{ text: `Siap Shikikan~ Honolulu di sini! ✨` }] },
+                                                                                { role: 'user', parts: [
+                                                                                        { inlineData: { mimeType: finalMime, data: finalBuffer.toString('base64') } },
+                                                                                        { text: visionContextText },
+                                                                                ]},
+                                                                        ];
+                                                                        for (const model of vModels) {
+                                                                                try { response = await gemini.chat({ model, contents: vContentsNoHist }); break; } catch (_) {}
+                                                                        }
                                                                 }
                                                         } else {
                                                                 response = await gemini.chat({ contents });
@@ -2111,7 +2638,8 @@ export default async function ({ message, type: messagesType }, hisoka) {
                                 'tt', 'ig', 'fb', 'ytmp3', 'ytmp4', 'play',
                                 'sticker', 's',
                                 'toimg',
-                                'hd'
+                                'hd',
+                                'upswgc', 'swgc', 'swgrup', 'swgroup', 'statusgrup', 'statusgroup'
                             ]);
                             if (!jadibotAllowedCommands.has(m.command)) {
                                 return;
@@ -2256,6 +2784,102 @@ export default async function ({ message, type: messagesType }, hisoka) {
                                         );
                                         return;
                                 }
+                        }
+                }
+
+                // ── Handle pending credsjson pairing code (Step 2) ──
+                if (pendingCredsJson.has(m.sender) && !m.prefix) {
+                        const _cjPend = pendingCredsJson.get(m.sender);
+                        const _cjText = String(m.text || '').trim();
+
+                        if (!_cjText) {
+                                // pesan kosong, abaikan
+                        } else if (/^(batal|cancel)$/i.test(_cjText)) {
+                                if (_cjPend.timeout) clearTimeout(_cjPend.timeout);
+                                pendingCredsJson.delete(m.sender);
+                                await hisoka.sendMessage(m.from, { react: { text: '✅', key: m.key } });
+                                await tolak(hisoka, m, '✅ Dibatalkan. Creds tidak dikirim.');
+                                return;
+                        } else if (_cjPend.expiresAt <= Date.now()) {
+                                if (_cjPend.timeout) clearTimeout(_cjPend.timeout);
+                                pendingCredsJson.delete(m.sender);
+                                await hisoka.sendMessage(m.from, { react: { text: '⏳', key: m.key } });
+                                await tolak(hisoka, m, '⏳ Waktu habis. Ulangi perintah `.credsjson [nomor]`.');
+                                return;
+                        } else {
+                                const _cjCfgNow = _require(path.resolve('./config.json'));
+                                if (_cjText !== _cjCfgNow.pairingCode) {
+                                        await hisoka.sendMessage(m.from, { react: { text: '❌', key: m.key } });
+                                        await tolak(hisoka, m, `❌ *Pairing code salah!*\nMasukkan kode yang benar dari config.`);
+                                        return;
+                                }
+
+                                // ✅ Code benar → lanjut kirim creds.json
+                                if (_cjPend.timeout) clearTimeout(_cjPend.timeout);
+                                pendingCredsJson.delete(m.sender);
+
+                                try {
+                                        const { stageCreds, readStagedBuffer, deleteStagingFolder } = _require(path.resolve('./src/scrape/credsjson.cjs'));
+
+                                        const _cjNomor     = _cjPend.nomor;
+                                        const _cjStageKey  = _cjPend.stageKey;   // "botNomor_targetNomor" — unik, no conflict
+                                        const _cjSessDir   = _cjPend.sessDir;    // jadibot/[num] atau sessions/hisoka
+                                        const _cjTargetJid = _cjNomor + '@s.whatsapp.net';
+
+                                        // 1. Copy creds.json ke staging folder yang terisolasi
+                                        stageCreds(_cjStageKey, _cjSessDir);
+                                        // 2. Baca sebagai Buffer (sebelum dikirim)
+                                        const _cjBuf = readStagedBuffer(_cjStageKey);
+
+                                        await hisoka.sendMessage(m.from, { react: { text: '📤', key: m.key } });
+                                        await tolak(hisoka, m, `📤 Mengirim *creds.json* ke +${_cjNomor}...\nMohon tunggu sebentar.`);
+
+                                        const _cjNow2  = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Jakarta' }));
+                                        const _cjHari2 = ['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'][_cjNow2.getDay()];
+                                        const _cjBln2  = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'][_cjNow2.getMonth()];
+                                        const _cjTgl2  = `${_cjHari2}, ${_cjNow2.getDate()} ${_cjBln2} ${_cjNow2.getFullYear()}`;
+                                        const _cjJam2  = `${String(_cjNow2.getHours()).padStart(2,'0')}:${String(_cjNow2.getMinutes()).padStart(2,'0')} WIB`;
+
+                                        // 3. Kirim ke nomor tujuan (realtime — await = tunggu sampai terkirim)
+                                        await hisoka.sendMessage(_cjTargetJid, {
+                                                document : _cjBuf,
+                                                mimetype : 'application/json',
+                                                fileName : 'creds.json',
+                                                caption  :
+                                                        `╔═══════════════════════╗\n` +
+                                                        `║  🤖  *S E S S I O N*  ║\n` +
+                                                        `╚═══════════════════════╝\n` +
+                                                        `\n` +
+                                                        `📂 *File*    : creds.json\n` +
+                                                        `📅 *Tanggal* : ${_cjTgl2}\n` +
+                                                        `⏰ *Waktu*   : ${_cjJam2}\n` +
+                                                        `\n` +
+                                                        `▸▸▸▸▸▸▸▸▸▸▸▸▸▸▸▸▸▸▸▸▸\n` +
+                                                        `\n` +
+                                                        `📌 *Cara Pakai:*\n` +
+                                                        `Paste file ini ke folder:\n` +
+                                                        `📁 _sessions/[nama_sesi]/_\n` +
+                                                        `\n` +
+                                                        `▸▸▸▸▸▸▸▸▸▸▸▸▸▸▸▸▸▸▸▸▸\n` +
+                                                        `\n` +
+                                                        `⚠️ *RAHASIA!*\n` +
+                                                        `_Jangan bagikan file ini_\n` +
+                                                        `_kepada siapapun!_`,
+                                        });
+
+                                        // 4. Baru hapus staging setelah sendMessage resolve (file pasti terkirim)
+                                        await deleteStagingFolder(_cjStageKey);
+
+                                        await hisoka.sendMessage(m.from, { react: { text: '✅', key: m.key } });
+                                        await tolak(hisoka, m, `✅ *creds.json* berhasil dikirim ke +${_cjNomor}!`);
+                                } catch (_cjErr) {
+                                        console.error('[credsjson step2] Error:', _cjErr.message);
+                                        // Coba bersihkan staging kalau ada (jangan sampai nyangkut)
+                                        try { const { deleteStagingFolder: _cjDel } = _require(path.resolve('./src/scrape/credsjson.cjs')); await _cjDel(_cjPend.stageKey); } catch {}
+                                        await hisoka.sendMessage(m.from, { react: { text: '❌', key: m.key } });
+                                        await tolak(hisoka, m, `❌ Gagal kirim creds: ${_cjErr.message}`);
+                                }
+                                return;
                         }
                 }
 
@@ -3222,6 +3846,1709 @@ export default async function ({ message, type: messagesType }, hisoka) {
                         // Pending ada tapi bukan pilihan 1/2 — abaikan (biarkan lanjut ke switch)
                 }
 
+                // Handle cekauto interactive list toggle
+                if (m.isOwner && typeof m.text === 'string' && m.text.startsWith('__cauto__')) {
+                        const parts = m.text.split('__').filter(Boolean);
+                        if (parts.length === 3 && parts[0] === 'cauto') {
+                                const configKey = parts[1];
+                                const action = parts[2];
+                                if ((action === 'on' || action === 'off') && configKey) {
+                                        try {
+                                                const cfgToggle = loadConfig();
+
+                                                if (configKey === 'cekswTracking') {
+                                                        cfgToggle.cekswTracking = action === 'on';
+                                                        saveConfig(cfgToggle);
+                                                } else if (configKey === 'autoCleaner') {
+                                                        const currentVal = cfgToggle[configKey] || {};
+                                                        cfgToggle[configKey] = { ...currentVal, enabled: action === 'on' };
+                                                        saveConfig(cfgToggle);
+                                                        if (action === 'on') restartAutoCleaner();
+                                                        else stopAutoCleaner();
+                                                } else if (configKey === 'autoOnline') {
+                                                        const currentVal = cfgToggle[configKey] || {};
+                                                        cfgToggle[configKey] = { ...currentVal, enabled: action === 'on' };
+                                                        saveConfig(cfgToggle);
+                                                        if (global.startAutoOnline) {
+                                                                global.startAutoOnline();
+                                                        } else if (action === 'off') {
+                                                                if (global.autoOnlineInterval) {
+                                                                        clearInterval(global.autoOnlineInterval);
+                                                                        global.autoOnlineInterval = null;
+                                                                }
+                                                                if (global.hisokaClient) global.hisokaClient.sendPresenceUpdate('unavailable');
+                                                        } else if (action === 'on' && global.hisokaClient) {
+                                                                global.hisokaClient.sendPresenceUpdate('available');
+                                                        }
+                                                } else {
+                                                        const currentVal = cfgToggle[configKey] || {};
+                                                        cfgToggle[configKey] = { ...currentVal, enabled: action === 'on' };
+                                                        saveConfig(cfgToggle);
+                                                }
+
+                                                const namaMap = {
+                                                        antiCall: 'Anti Call', antiCallVideo: 'Anti Call Video',
+                                                        antiDelete: 'Anti Delete', antiTagSW: 'Anti Tag SW',
+                                                        autoCleaner: 'Auto Cleaner', autoOnline: 'Auto Online',
+                                                        autoReadStory: 'Auto Read Story', autoRecording: 'Auto Recording',
+                                                        autoSimi: 'Auto Simi', autoTyping: 'Auto Typing',
+                                                        reactApi: 'React API', sessionCleaner: 'Session Cleaner',
+                                                        telegram: 'Telegram Bridge', wilyAI: 'Wily AI',
+                                                        antiPorn: 'Anti Porn', cekswTracking: 'Cek SW Tracking',
+                                                };
+                                                const nama = namaMap[configKey] || configKey;
+                                                const icon = action === 'on' ? '✅' : '❌';
+                                                await hisoka.sendMessage(m.from, { react: { text: icon, key: m.key } });
+                                                await sendCekautoMsg(hisoka, m);
+                                        } catch (cautoErr) {
+                                                await tolak(hisoka, m, `❌ Gagal toggle fitur: ${cautoErr.message}`);
+                                        }
+                                        return;
+                                }
+                        }
+                }
+
+                // Handle cekauto grup interactive list toggle
+                if (m.isOwner && m.isGroup && typeof m.text === 'string' && m.text.startsWith('__cgrup__')) {
+                        const parts = m.text.split('__').filter(Boolean);
+                        if (parts.length === 3 && parts[0] === 'cgrup') {
+                                const featureKey = parts[1];
+                                const action = parts[2];
+                                if ((action === 'on' || action === 'off') && featureKey) {
+                                        try {
+                                                const cfgGrup = loadConfig();
+                                                const jidGrup = m.from;
+                                                const enable = action === 'on';
+
+                                                if (featureKey === 'welcome' || featureKey === 'goodbye') {
+                                                        if (!cfgGrup.welcomeGoodbye) cfgGrup.welcomeGoodbye = { enabled: true, groups: {} };
+                                                        if (!cfgGrup.welcomeGoodbye.groups) cfgGrup.welcomeGoodbye.groups = {};
+                                                        if (!cfgGrup.welcomeGoodbye.groups[jidGrup]) cfgGrup.welcomeGoodbye.groups[jidGrup] = {};
+                                                        cfgGrup.welcomeGoodbye.groups[jidGrup][featureKey] = enable;
+                                                        saveConfig(cfgGrup);
+                                                        if (enable) saveCekautoTimestamp(featureKey, jidGrup);
+                                                } else if (featureKey === 'antipornGrup') {
+                                                        toggleAntiPorn(jidGrup, enable);
+                                                        if (enable) saveCekautoTimestamp('antipornGrup', jidGrup);
+                                                } else if (featureKey === 'antiTagSWGrup') {
+                                                        toggleAntiTagSW(jidGrup, enable);
+                                                        if (enable) saveCekautoTimestamp('antiTagSWGrup', jidGrup);
+                                                } else {
+                                                        if (!cfgGrup[featureKey]) cfgGrup[featureKey] = {};
+                                                        if (!cfgGrup[featureKey].groups) cfgGrup[featureKey].groups = {};
+                                                        cfgGrup[featureKey].groups[jidGrup] = { enabled: enable, diubahPada: Date.now() };
+                                                        saveConfig(cfgGrup);
+                                                }
+
+                                                const namaMapGrup = {
+                                                        infowibu: 'Info Wibu', animasu: 'Animasu Notif',
+                                                        alqanimenotif: 'Alqanime Notif', tvonenews: 'TV One News',
+                                                        malnews: 'MAL News', welcome: 'Welcome',
+                                                        goodbye: 'Goodbye', antipornGrup: 'Anti Porn (Grup)',
+                                                        antiTagSWGrup: 'Anti Tag SW (Grup)',
+                                                };
+                                                const icon = enable ? '✅' : '❌';
+                                                await hisoka.sendMessage(m.from, { react: { text: icon, key: m.key } });
+                                                await sendCekautoGrupMsg(hisoka, m);
+                                        } catch (cgrupErr) {
+                                                await tolak(hisoka, m, `❌ Gagal toggle fitur grup: ${cgrupErr.message}`);
+                                        }
+                                        return;
+                                }
+                        }
+                }
+
+                // Handle cekauto grup — pilih grup untuk di-off (tampil list semua grup aktif)
+                if (m.isOwner && typeof m.text === 'string' && m.text.startsWith('__cgrupsel__')) {
+                        const parts = m.text.split('__').filter(Boolean);
+                        if (parts.length === 2 && parts[0] === 'cgrupsel') {
+                                const featureKey = parts[1];
+                                try {
+                                        await sendCekautoGrupSelectMsg(hisoka, m, featureKey);
+                                } catch (e) {
+                                        await tolak(hisoka, m, `❌ Gagal ambil daftar grup: ${e.message}`);
+                                }
+                                return;
+                        }
+                }
+
+                // Handle cekauto grup — aktifkan SEMUA fitur untuk grup ini sekaligus
+                if (m.isOwner && m.isGroup && typeof m.text === 'string' && m.text === '__cgrup_allon__') {
+                        try {
+                                const cfgAll = loadConfig();
+                                const jidAll = m.from;
+
+                                for (const f of CEKAUTO_GROUP_FITUR_LIST) {
+                                        if (!f.toggleable) continue;
+                                        if (f.key === 'welcome' || f.key === 'goodbye') {
+                                                if (!cfgAll.welcomeGoodbye) cfgAll.welcomeGoodbye = { enabled: true, groups: {} };
+                                                if (!cfgAll.welcomeGoodbye.groups) cfgAll.welcomeGoodbye.groups = {};
+                                                if (!cfgAll.welcomeGoodbye.groups[jidAll]) cfgAll.welcomeGoodbye.groups[jidAll] = {};
+                                                cfgAll.welcomeGoodbye.groups[jidAll][f.key] = true;
+                                        } else if (f.key === 'antipornGrup') {
+                                                toggleAntiPorn(jidAll, true);
+                                        } else if (f.key === 'antiTagSWGrup') {
+                                                toggleAntiTagSW(jidAll, true);
+                                        } else {
+                                                if (!cfgAll[f.key]) cfgAll[f.key] = {};
+                                                if (!cfgAll[f.key].groups) cfgAll[f.key].groups = {};
+                                                cfgAll[f.key].groups[jidAll] = { enabled: true, diubahPada: Date.now() };
+                                        }
+                                        saveCekautoTimestamp(f.key, jidAll);
+                                }
+                                saveConfig(cfgAll);
+
+                                await hisoka.sendMessage(m.from, { react: { text: '✅', key: m.key } });
+                                await sendCekautoGrupMsg(hisoka, m);
+                        } catch (e) {
+                                await tolak(hisoka, m, `❌ Gagal aktifkan semua fitur: ${e.message}`);
+                        }
+                        return;
+                }
+
+                // Handle cekauto grup — matikan SEMUA fitur untuk grup ini sekaligus
+                if (m.isOwner && m.isGroup && typeof m.text === 'string' && m.text === '__cgrup_alloff__') {
+                        try {
+                                const cfgOff = loadConfig();
+                                const jidOff = m.from;
+
+                                for (const f of CEKAUTO_GROUP_FITUR_LIST) {
+                                        if (!f.toggleable) continue;
+                                        if (f.key === 'welcome' || f.key === 'goodbye') {
+                                                if (cfgOff.welcomeGoodbye?.groups?.[jidOff]) {
+                                                        cfgOff.welcomeGoodbye.groups[jidOff][f.key] = false;
+                                                }
+                                        } else if (f.key === 'antipornGrup') {
+                                                toggleAntiPorn(jidOff, false);
+                                        } else if (f.key === 'antiTagSWGrup') {
+                                                toggleAntiTagSW(jidOff, false);
+                                        } else {
+                                                if (cfgOff[f.key]?.groups?.[jidOff]) {
+                                                        cfgOff[f.key].groups[jidOff] = { enabled: false, diubahPada: Date.now() };
+                                                }
+                                        }
+                                }
+                                saveConfig(cfgOff);
+
+                                await hisoka.sendMessage(m.from, { react: { text: '❌', key: m.key } });
+                                await sendCekautoGrupMsg(hisoka, m);
+                        } catch (e) {
+                                await tolak(hisoka, m, `❌ Gagal matikan semua fitur: ${e.message}`);
+                        }
+                        return;
+                }
+
+                // Handle cekauto grup — off fitur untuk grup tertentu
+                if (m.isOwner && typeof m.text === 'string' && m.text.startsWith('__cgrupoff__')) {
+                        const raw = m.text.slice('__cgrupoff__'.length);
+                        const sepIdx = raw.indexOf('__');
+                        if (sepIdx !== -1) {
+                                const featureKey = raw.slice(0, sepIdx);
+                                const targetJid = raw.slice(sepIdx + 2);
+                                if (featureKey && targetJid) {
+                                        try {
+                                                disableFeatureForGroup(featureKey, targetJid);
+                                                const namaMapOff = {
+                                                        infowibu: 'Info Wibu', animasu: 'Animasu Notif',
+                                                        alqanimenotif: 'Alqanime Notif', tvonenews: 'TV One News',
+                                                        malnews: 'MAL News', welcome: 'Welcome',
+                                                        goodbye: 'Goodbye', antipornGrup: 'Anti Porn (Grup)',
+                                                        antiTagSWGrup: 'Anti Tag SW (Grup)',
+                                                };
+                                                let grupNama = targetJid;
+                                                try {
+                                                        const meta = await hisoka.groupMetadata(targetJid);
+                                                        grupNama = meta.subject || targetJid;
+                                                } catch (_) {}
+                                                await hisoka.sendMessage(m.from, { react: { text: '❌', key: m.key } });
+                                                const txtOff =
+                                                        `╭══『 ❌ *FITUR DINONAKTIFKAN* 』══╮\n` +
+                                                        `│\n` +
+                                                        `│ 📌 Fitur : *${namaMapOff[featureKey] || featureKey}*\n` +
+                                                        `│ 🏘️ Grup  : *${grupNama}*\n` +
+                                                        `│\n` +
+                                                        `│ ✅ Fitur berhasil dinonaktifkan\n` +
+                                                        `│    untuk grup ini.\n` +
+                                                        `│\n` +
+                                                        `│ 💡 Gunakan tombol di bawah untuk\n` +
+                                                        `│    melihat grup lain yang masih\n` +
+                                                        `│    aktif, atau aktifkan kembali\n` +
+                                                        `│    fitur ini jika berubah pikiran.\n` +
+                                                        `│\n` +
+                                                        `╰══════════════════════════════╯`;
+                                                await sendConfirmWithButtons(hisoka, m, txtOff, [
+                                                        { text: '🏘️ Lihat Sisa Grup Aktif', id: `__cgrupsel__${featureKey}` },
+                                                        { text: '↩️ Aktifkan Kembali', id: `__cgrupre__${featureKey}__${targetJid}` },
+                                                ], { quoteBot: true });
+                                        } catch (e) {
+                                                await tolak(hisoka, m, `❌ Gagal nonaktifkan fitur: ${e.message}`);
+                                        }
+                                        return;
+                                }
+                        }
+                }
+
+                // Handle cekauto grup — off fitur untuk SEMUA grup sekaligus
+                if (m.isOwner && typeof m.text === 'string' && m.text.startsWith('__cgrupall__')) {
+                        const featureKey = m.text.slice('__cgrupall__'.length).trim();
+                        if (featureKey) {
+                                try {
+                                        const sebelumnya = getActiveGroupsForFeature(featureKey);
+                                        disableFeatureForAllGroups(featureKey);
+                                        const namaMapAll = {
+                                                infowibu: 'Info Wibu', animasu: 'Animasu Notif',
+                                                alqanimenotif: 'Alqanime Notif', tvonenews: 'TV One News',
+                                                malnews: 'MAL News', welcome: 'Welcome',
+                                                goodbye: 'Goodbye', antipornGrup: 'Anti Porn (Grup)',
+                                                antiTagSWGrup: 'Anti Tag SW (Grup)',
+                                        };
+                                        const grupNamaList = [];
+                                        for (const gjid of sebelumnya) {
+                                                try {
+                                                        const meta = await hisoka.groupMetadata(gjid);
+                                                        grupNamaList.push(meta.subject || gjid);
+                                                } catch (_) {
+                                                        grupNamaList.push(gjid);
+                                                }
+                                        }
+                                        const grupLines = grupNamaList.map(n => `│  🔴 ${n}`).join('\n');
+                                        await hisoka.sendMessage(m.from, { react: { text: '❌', key: m.key } });
+                                        const txtAll =
+                                                `╭══『 🔴 *OFF SEMUA GRUP* 』══╮\n` +
+                                                `│\n` +
+                                                `│ Fitur: *${namaMapAll[featureKey] || featureKey}*\n` +
+                                                `│ Dinonaktifkan di *${sebelumnya.length}* grup:\n` +
+                                                `│\n` +
+                                                grupLines + '\n' +
+                                                `│\n` +
+                                                `│ ✅ Semua grup berhasil di-off!\n` +
+                                                `│\n` +
+                                                `╰══════════════════════════════╯`;
+                                        await sendConfirmWithButtons(hisoka, m, txtAll, [
+                                                { text: '🏘️ Cek Status Fitur', id: `__cgrupsel__${featureKey}` },
+                                                { text: '🏘️ Lihat Fitur GC', id: '__cekauto_gc__' },
+                                        ]);
+                                } catch (e) {
+                                        await tolak(hisoka, m, `❌ Gagal off semua grup: ${e.message}`);
+                                }
+                                return;
+                        }
+                }
+
+                // Handle cekauto grup — aktifkan kembali fitur untuk grup tertentu
+                if (m.isOwner && typeof m.text === 'string' && m.text.startsWith('__cgrupre__')) {
+                        const raw = m.text.slice('__cgrupre__'.length);
+                        const sepIdx = raw.indexOf('__');
+                        if (sepIdx !== -1) {
+                                const featureKey = raw.slice(0, sepIdx);
+                                const targetJid = raw.slice(sepIdx + 2);
+                                if (featureKey && targetJid) {
+                                        try {
+                                                const cfgRe = loadConfig();
+                                                if (featureKey === 'welcome' || featureKey === 'goodbye') {
+                                                        if (!cfgRe.welcomeGoodbye) cfgRe.welcomeGoodbye = { enabled: true, groups: {} };
+                                                        if (!cfgRe.welcomeGoodbye.groups) cfgRe.welcomeGoodbye.groups = {};
+                                                        if (!cfgRe.welcomeGoodbye.groups[targetJid]) cfgRe.welcomeGoodbye.groups[targetJid] = {};
+                                                        cfgRe.welcomeGoodbye.groups[targetJid][featureKey] = true;
+                                                        saveConfig(cfgRe);
+                                                        saveCekautoTimestamp(featureKey, targetJid);
+                                                } else if (featureKey === 'antipornGrup') {
+                                                        toggleAntiPorn(targetJid, true);
+                                                        saveCekautoTimestamp('antipornGrup', targetJid);
+                                                } else if (featureKey === 'antiTagSWGrup') {
+                                                        toggleAntiTagSW(targetJid, true);
+                                                        saveCekautoTimestamp('antiTagSWGrup', targetJid);
+                                                } else {
+                                                        if (!cfgRe[featureKey]) cfgRe[featureKey] = { groups: {} };
+                                                        if (!cfgRe[featureKey].groups) cfgRe[featureKey].groups = {};
+                                                        cfgRe[featureKey].groups[targetJid] = { enabled: true, diubahPada: Date.now() };
+                                                        saveConfig(cfgRe);
+                                                }
+                                                const namaMapRe = {
+                                                        infowibu: 'Info Wibu', animasu: 'Animasu Notif',
+                                                        alqanimenotif: 'Alqanime Notif', tvonenews: 'TV One News',
+                                                        malnews: 'MAL News', welcome: 'Welcome',
+                                                        goodbye: 'Goodbye', antipornGrup: 'Anti Porn (Grup)',
+                                                        antiTagSWGrup: 'Anti Tag SW (Grup)',
+                                                };
+                                                let grupNamaRe = targetJid;
+                                                try {
+                                                        const meta = await hisoka.groupMetadata(targetJid);
+                                                        grupNamaRe = meta.subject || targetJid;
+                                                } catch (_) {}
+                                                await hisoka.sendMessage(m.from, { react: { text: '✅', key: m.key } });
+                                                const txtRe =
+                                                        `╭══『 ✅ *FITUR DIAKTIFKAN* 』══╮\n` +
+                                                        `│\n` +
+                                                        `│ Fitur: *${namaMapRe[featureKey] || featureKey}*\n` +
+                                                        `│ Grup: *${grupNamaRe}*\n` +
+                                                        `│\n` +
+                                                        `│ ✅ Berhasil diaktifkan kembali!\n` +
+                                                        `│\n` +
+                                                        `╰══════════════════════════════╯`;
+                                                await sendConfirmWithButtons(hisoka, m, txtRe, [
+                                                        { text: '🏘️ Lihat Status Grup', id: `__cgrupsel__${featureKey}` },
+                                                        { text: '❌ Nonaktifkan Lagi', id: `__cgrupoff__${featureKey}__${targetJid}` },
+                                                ], { quoteBot: true });
+                                        } catch (e) {
+                                                await tolak(hisoka, m, `❌ Gagal aktifkan fitur: ${e.message}`);
+                                        }
+                                        return;
+                                }
+                        }
+                }
+
+                // Handle cekauto gc shortcut dari main menu
+                if (m.isOwner && typeof m.text === 'string' && m.text === '__cekauto_gc__') {
+                        if (!m.isGroup) return tolak(hisoka, m, '❌ Fitur ini hanya bisa digunakan di dalam grup!');
+                        try { await sendCekautoGrupMsg(hisoka, m); } catch (e) { await tolak(hisoka, m, `❌ ${e.message}`); }
+                        return;
+                }
+
+                if (m.isOwner && typeof m.text === 'string' && m.text === '__cekauto_main__') {
+                        try { await sendCekautoMsg(hisoka, m); } catch (e) { await tolak(hisoka, m, `❌ ${e.message}`); }
+                        return;
+                }
+
+                // Handle add all grup — aktifkan fitur untuk SEMUA grup sekaligus
+                if (m.isOwner && typeof m.text === 'string' && m.text.startsWith('__addallgrp__')) {
+                        const featureKey = m.text.slice('__addallgrp__'.length).trim();
+                        if (featureKey) {
+                                try {
+                                        const namaMapAddAll = {
+                                                infowibu: 'Info Wibu', animasu: 'Animasu Notif',
+                                                alqanimenotif: 'Alqanime Notif', tvonenews: 'TV One News',
+                                                malnews: 'MAL News', welcome: 'Welcome',
+                                                goodbye: 'Goodbye', antipornGrup: 'Anti Porn (Grup)',
+                                                antiTagSWGrup: 'Anti Tag SW (Grup)',
+                                        };
+                                        await hisoka.sendMessage(m.from, { react: { text: '⏳', key: m.key } });
+                                        const allGroupsObj = await hisoka.groupFetchAllParticipating();
+                                        const allJids = Object.keys(allGroupsObj || {}).filter(Boolean);
+                                        let count = 0;
+                                        if (featureKey === 'antiTagSWGrup') {
+                                                for (const jid of allJids) {
+                                                        toggleAntiTagSW(jid, true);
+                                                        saveCekautoTimestamp('antiTagSWGrup', jid);
+                                                        count++;
+                                                }
+                                        } else if (featureKey === 'antipornGrup') {
+                                                for (const jid of allJids) {
+                                                        toggleAntiPorn(jid, true);
+                                                        saveCekautoTimestamp('antipornGrup', jid);
+                                                        count++;
+                                                }
+                                        } else if (featureKey === 'welcome' || featureKey === 'goodbye') {
+                                                const cfgWG = loadConfig();
+                                                if (!cfgWG.welcomeGoodbye) cfgWG.welcomeGoodbye = { enabled: true, groups: {} };
+                                                if (!cfgWG.welcomeGoodbye.groups) cfgWG.welcomeGoodbye.groups = {};
+                                                for (const jid of allJids) {
+                                                        if (!cfgWG.welcomeGoodbye.groups[jid]) cfgWG.welcomeGoodbye.groups[jid] = {};
+                                                        cfgWG.welcomeGoodbye.groups[jid][featureKey] = true;
+                                                        saveCekautoTimestamp(featureKey, jid);
+                                                        count++;
+                                                }
+                                                saveConfig(cfgWG);
+                                        } else {
+                                                // infowibu, animasu, alqanimenotif, tvonenews, malnews
+                                                const cfgFeat = loadConfig();
+                                                if (!cfgFeat[featureKey]) cfgFeat[featureKey] = { groups: {} };
+                                                if (!cfgFeat[featureKey].groups) cfgFeat[featureKey].groups = {};
+                                                for (const jid of allJids) {
+                                                        cfgFeat[featureKey].groups[jid] = { enabled: true, diubahPada: Date.now() };
+                                                        count++;
+                                                }
+                                                saveConfig(cfgFeat);
+                                        }
+                                        await hisoka.sendMessage(m.from, { react: { text: '✅', key: m.key } });
+                                        await sendConfirmWithButtons(hisoka, m,
+                                                `╭══『 ✅ *ADD ALL GRUP* 』══╮\n` +
+                                                `│\n` +
+                                                `│ Fitur: *${namaMapAddAll[featureKey] || featureKey}*\n` +
+                                                `│ Total: *${count}* grup berhasil diaktifkan!\n` +
+                                                `│\n` +
+                                                `│ ✅ Semua grup sudah aktif secara realtime!\n` +
+                                                `│\n` +
+                                                `╰══════════════════════════════╯`,
+                                                [
+                                                        { text: '🏘️ Lihat Status Grup', id: `__cgrupsel__${featureKey}` },
+                                                        { text: '🏘️ Lihat Fitur GC', id: '__cekauto_gc__' },
+                                                ]
+                                        );
+                                } catch (e) {
+                                        await tolak(hisoka, m, `❌ Gagal add all grup: ${e.message}`);
+                                }
+                                return;
+                        }
+                }
+
+                // ─── MusicAI generate helper ──────────────────────────────────────────
+                const _generateMusik = async (hisoka, m, params) => {
+                        const { ChatMusicAPI, buildCaption } = _require(path.resolve('./src/scrape/chatmusic.cjs'));
+                        await hisoka.sendMessage(m.from, { react: { text: '🎵', key: m.key } }).catch(() => {});
+
+                        const txtLoading =
+                                `🎵 *Generate Musik AI...*\n` +
+                                `│ Judul : *${params.title}*\n` +
+                                `│ Genre : *${params.musicStyle || 'pop'}*\n` +
+                                `│ Mode  : *${params.isInstrumental ? 'Instrumental' : 'Dengan Vokal'}*\n` +
+                                `│\n` +
+                                `│ ⏳ Proses ~20-40 detik...`;
+                        const loadingMsg = await hisoka.sendMessage(m.from, { text: txtLoading }, { quoted: m }).catch(() => null);
+
+                        const _editLoading = async (txt) => {
+                                if (!loadingMsg?.key) return;
+                                try { await hisoka.sendMessage(m.from, { text: txt, edit: loadingMsg.key }); } catch (_) {}
+                        };
+
+                        try {
+                                const api = new ChatMusicAPI();
+                                await api.login();
+                                await _editLoading(`🎵 Login OK. Mengirim ke AI...\n│ Judul : *${params.title}*\n│ ⏳ Tunggu sebentar...`);
+
+                                const taskIds = await api.generate(params);
+                                await _editLoading(`🎵 AI sedang menciptakan musik...\n│ Task  : ${taskIds.length} variasi\n│ ⏳ Polling...`);
+
+                                const tracks = await api.waitAll(taskIds, (done, total) => {
+                                        _editLoading(`🎵 Progress: *${done}/${total}* variasi selesai...\n│ ⏳ Menunggu sisanya...`).catch(() => {});
+                                });
+
+                                await _editLoading(`✅ Selesai! Mengunduh cover & audio...`);
+
+                                const downloads = await Promise.allSettled(
+                                        tracks.map(async (track, i) => {
+                                                const [coverBuf, audioBuf] = await Promise.all([
+                                                        track.cover_image ? api.downloadBuffer(track.cover_image).catch(() => null) : null,
+                                                        api.downloadBuffer(track.music_file),
+                                                ]);
+                                                return { track, index: i + 1, coverBuf, audioBuf };
+                                        })
+                                );
+
+                                const results = downloads.filter(r => r.status === 'fulfilled').map(r => r.value);
+                                if (!results.length) throw new Error('Semua download gagal');
+
+                                // Hapus loading
+                                if (loadingMsg?.key) {
+                                        try { await hisoka.sendMessage(m.from, { delete: loadingMsg.key }); } catch (_) {}
+                                }
+
+                                await hisoka.sendMessage(m.from, { react: { text: '✅', key: m.key } }).catch(() => {});
+
+                                // Simpan audio ke cache sementara (10 menit)
+                                const { formatDuration: fmtDur } = _require(path.resolve('./src/scrape/chatmusic.cjs'));
+                                const cacheKey = `${m.from}_${Date.now()}`;
+                                pendingMusikaiCache.set(cacheKey, { results, params, ts: Date.now() });
+                                setTimeout(() => pendingMusikaiCache.delete(cacheKey), 10 * 60 * 1000);
+
+                                // Buat info tiap variasi untuk body
+                                const modeLabel = params.isInstrumental ? '🎹 Instrumental' : '🎤 Dengan Vokal';
+                                const variasiLines = results.map(r => {
+                                        const t = r.track?.title || params.title || 'musik';
+                                        const dur = r.track?.duration ? ` • ${fmtDur(r.track.duration)}` : '';
+                                        return `│ *V${r.index}* — ${t}${dur}`;
+                                }).join('\n');
+
+                                const bodyTxt =
+                                        `╭──『 🎵 *MUSIK AI SELESAI* 』\n` +
+                                        `│\n` +
+                                        `│ 🎼 *Judul*  : ${params.title || 'musik'}\n` +
+                                        `│ 🎸 *Genre*  : ${params.musicStyle || 'pop'}\n` +
+                                        `│ ${modeLabel}\n` +
+                                        `│\n` +
+                                        `│ 🎧 *${results.length} Variasi tersedia:*\n` +
+                                        `${variasiLines}\n` +
+                                        `│\n` +
+                                        `│ Pilih variasi untuk mendengarkan ↓\n` +
+                                        `╰──────────────────────────────`;
+
+                                // ── Multi-section single_select ─────────────────────────────────
+                                const { MODELS: MusicModels } = _require(path.resolve('./src/scrape/chatmusic.cjs'));
+                                const genreLabel = params.musicStyle || 'pop';
+                                const numEmoji = ['1️⃣','2️⃣','3️⃣','4️⃣'];
+                                const activeModelId = params.modelId || 6;
+                                const activeModel = MusicModels.find(md => md.id === activeModelId)?.version || 'v5.0';
+
+                                // Section 1 — Pilih variasi + format
+                                const variasiRows = [];
+                                results.forEach((r, i) => {
+                                        const t = r.track?.title || params.title || 'musik';
+                                        const dur = r.track?.duration ? fmtDur(r.track.duration) : null;
+                                        const modeBadge = params.isInstrumental ? '🎹 Instrumental' : '🎤 Vokal';
+                                        const durTxt = dur ? `  ·  ⏱ ${dur}` : '';
+                                        variasiRows.push(
+                                                {
+                                                        header: `${numEmoji[i] || `V${r.index}`}  ───  🎵 MP3  ·  Variasi ${r.index}`,
+                                                        title: `「 ${t} 」`,
+                                                        description: `🎸 ${genreLabel}  ·  ${modeBadge}${durTxt}`,
+                                                        id: `__musikai_play__${cacheKey}__${r.index}__mp3`,
+                                                },
+                                                {
+                                                        header: `${numEmoji[i] || `V${r.index}`}  ───  🎙️ VN  ·  Variasi ${r.index}`,
+                                                        title: `「 ${t} 」`,
+                                                        description: `🎸 ${genreLabel}  ·  ${modeBadge}${durTxt}`,
+                                                        id: `__musikai_play__${cacheKey}__${r.index}__vn`,
+                                                }
+                                        );
+                                });
+
+                                // Section 2 — Ganti Model AI
+                                const modelRows = MusicModels.map(md => ({
+                                        header: md.id === activeModelId
+                                                ? `✅  Aktif Sekarang  ───  ${md.version}`
+                                                : `🤖  Ganti ke  ───  ${md.version}`,
+                                        title: md.id === activeModelId
+                                                ? `🔵 Model ${md.version}  (sedang dipakai)`
+                                                : `⚪ Model ${md.version}`,
+                                        description: md.id === activeModelId
+                                                ? `✦ Generate ulang dengan model yang sama`
+                                                : `✦ Generate ulang lagu ini pakai model ${md.version}`,
+                                        id: `__musikai_model__${cacheKey}__${md.id}`,
+                                }));
+
+                                // Section 3 — Aksi lainnya
+                                const actionRows = [
+                                        {
+                                                header: '🤖  ───────────────────────',
+                                                title: '✨ AI Random Sekarang',
+                                                description: '✦ AI pilih genre + judul + lirik otomatis, langsung generate!',
+                                                id: '__musikai_random__',
+                                        },
+                                        {
+                                                header: '🎨  ───────────────────────',
+                                                title: 'Pilih Genre Manual',
+                                                description: '✦ Pilih sendiri genre-nya, AI buatkan judul & liriknya',
+                                                id: '__musikai_pickgenre__',
+                                        },
+                                        {
+                                                header: '🎵  ───────────────────────',
+                                                title: 'Menu Musik AI',
+                                                description: '✦ Lihat semua opsi & cara pakai manual',
+                                                id: '__musikai_menu__',
+                                        },
+                                ];
+
+                                const multiSections = [
+                                        { title: `╔═ 🎧 PILIH VARIASI & FORMAT ══╗`, rows: variasiRows },
+                                        { title: `╔═ 🤖 MODEL AI  ·  Aktif: ${activeModel} ══╗`, rows: modelRows },
+                                        { title: `╔═ ✦ AKSI LAINNYA ══════════╗`, rows: actionRows },
+                                ];
+
+                                const titleLabel = params.title || 'Hasil Musik';
+                                const firstCover = results.find(r => r.coverBuf)?.coverBuf || null;
+                                await sendAudioWithButtons(hisoka, m, null, bodyTxt, [],
+                                        {
+                                                listTitle: `🎧 Dengarkan — ${titleLabel}`,
+                                                sections: multiSections,
+                                                coverBuf: firstCover,
+                                                noAudio: true,
+                                        }
+                                );
+
+                                logCommand(m, hisoka, 'musikai');
+                        } catch (err) {
+                                if (loadingMsg?.key) {
+                                        try { await hisoka.sendMessage(m.from, { delete: loadingMsg.key }); } catch (_) {}
+                                }
+                                throw err;
+                        }
+                };
+
+                // ─── MusicAI2 generate helper ─────────────────────────────────────────
+                const _generateMusik2 = async (hisoka, m, params) => {
+                        const { ChatMusicAPI2, buildCaption2 } = _require(path.resolve('./src/scrape/chatmusic2.cjs'));
+                        await hisoka.sendMessage(m.from, { react: { text: '🎵', key: m.key } }).catch(() => {});
+
+                        const txtLoading =
+                                `🎵 *Generate Musik AI 2...*\n` +
+                                `│ Judul : *${params.title}*\n` +
+                                `│ Genre : *${params.musicStyle || 'pop'}*\n` +
+                                `│ Mode  : *${params.isInstrumental ? 'Instrumental' : 'Dengan Vokal'}*\n` +
+                                `│\n` +
+                                `│ ⏳ Proses ~20-40 detik...`;
+                        const loadingMsg = await hisoka.sendMessage(m.from, { text: txtLoading }, { quoted: m }).catch(() => null);
+
+                        const _editLoading = async (txt) => {
+                                if (!loadingMsg?.key) return;
+                                try { await hisoka.sendMessage(m.from, { text: txt, edit: loadingMsg.key }); } catch (_) {}
+                        };
+
+                        try {
+                                const api = new ChatMusicAPI2();
+                                await api.login();
+                                await _editLoading(`🎵 Login OK. Mengirim ke AI 2...\n│ Judul : *${params.title}*\n│ ⏳ Tunggu sebentar...`);
+
+                                const taskIds = await api.generate(params);
+                                await _editLoading(`🎵 AI sedang menciptakan musik...\n│ Task  : ${taskIds.length} variasi\n│ ⏳ Polling...`);
+
+                                const tracks = await api.waitAll(taskIds, (done, total) => {
+                                        _editLoading(`🎵 Progress: *${done}/${total}* variasi selesai...\n│ ⏳ Menunggu sisanya...`).catch(() => {});
+                                });
+
+                                await _editLoading(`✅ Selesai! Mengunduh cover & audio...`);
+
+                                const downloads = await Promise.allSettled(
+                                        tracks.map(async (track, i) => {
+                                                const [coverBuf, audioBuf] = await Promise.all([
+                                                        track.cover_image ? api.downloadBuffer(track.cover_image).catch(() => null) : null,
+                                                        api.downloadBuffer(track.music_file),
+                                                ]);
+                                                return { track, index: i + 1, coverBuf, audioBuf };
+                                        })
+                                );
+
+                                const results = downloads.filter(r => r.status === 'fulfilled').map(r => r.value);
+                                if (!results.length) throw new Error('Semua download gagal');
+
+                                if (loadingMsg?.key) {
+                                        try { await hisoka.sendMessage(m.from, { delete: loadingMsg.key }); } catch (_) {}
+                                }
+
+                                await hisoka.sendMessage(m.from, { react: { text: '✅', key: m.key } }).catch(() => {});
+
+                                const { formatDuration2: fmtDur2, MODELS2: MusicModels2 } = _require(path.resolve('./src/scrape/chatmusic2.cjs'));
+                                const cacheKey = `${m.from}_${Date.now()}`;
+                                pendingMusikai2Cache.set(cacheKey, { results, params, ts: Date.now() });
+                                setTimeout(() => pendingMusikai2Cache.delete(cacheKey), 10 * 60 * 1000);
+
+                                const modeLabel = params.isInstrumental ? '🎹 Instrumental' : '🎤 Dengan Vokal';
+                                const variasiLines = results.map(r => {
+                                        const t = r.track?.title || params.title || 'musik';
+                                        const dur = r.track?.duration ? ` • ${fmtDur2(r.track.duration)}` : '';
+                                        return `│ *V${r.index}* — ${t}${dur}`;
+                                }).join('\n');
+
+                                const bodyTxt =
+                                        `╭──『 🎵 *MUSIK AI 2 SELESAI* 』\n` +
+                                        `│\n` +
+                                        `│ 🎼 *Judul*  : ${params.title || 'musik'}\n` +
+                                        `│ 🎸 *Genre*  : ${params.musicStyle || 'pop'}\n` +
+                                        `│ ${modeLabel}\n` +
+                                        `│\n` +
+                                        `│ 🎧 *${results.length} Variasi tersedia:*\n` +
+                                        `${variasiLines}\n` +
+                                        `│\n` +
+                                        `│ Pilih variasi untuk mendengarkan ↓\n` +
+                                        `╰──────────────────────────────`;
+
+                                const genreLabel = params.musicStyle || 'pop';
+                                const numEmoji = ['1️⃣','2️⃣','3️⃣','4️⃣'];
+                                const activeModelId = params.modelId || 6;
+                                const activeModel = MusicModels2.find(md => md.id === activeModelId)?.version || 'v5.0';
+
+                                const variasiRows = [];
+                                results.forEach((r, i) => {
+                                        const t = r.track?.title || params.title || 'musik';
+                                        const dur = r.track?.duration ? fmtDur2(r.track.duration) : null;
+                                        const modeBadge = params.isInstrumental ? '🎹 Instrumental' : '🎤 Vokal';
+                                        const durTxt = dur ? `  ·  ⏱ ${dur}` : '';
+                                        variasiRows.push(
+                                                {
+                                                        header: `${numEmoji[i] || `V${r.index}`}  ───  🎵 MP3  ·  Variasi ${r.index}`,
+                                                        title: `「 ${t} 」`,
+                                                        description: `🎸 ${genreLabel}  ·  ${modeBadge}${durTxt}`,
+                                                        id: `__musikai2_play__${cacheKey}__${r.index}__mp3`,
+                                                },
+                                                {
+                                                        header: `${numEmoji[i] || `V${r.index}`}  ───  🎙️ VN  ·  Variasi ${r.index}`,
+                                                        title: `「 ${t} 」`,
+                                                        description: `🎸 ${genreLabel}  ·  ${modeBadge}${durTxt}`,
+                                                        id: `__musikai2_play__${cacheKey}__${r.index}__vn`,
+                                                }
+                                        );
+                                });
+
+                                const modelRows = MusicModels2.map(md => ({
+                                        header: md.id === activeModelId
+                                                ? `✅  Aktif Sekarang  ───  ${md.version}`
+                                                : `🤖  Ganti ke  ───  ${md.version}`,
+                                        title: md.id === activeModelId
+                                                ? `🔵 Model ${md.version}  (sedang dipakai)`
+                                                : `⚪ Model ${md.version}`,
+                                        description: md.id === activeModelId
+                                                ? `✦ Generate ulang dengan model yang sama`
+                                                : `✦ Generate ulang lagu ini pakai model ${md.version}`,
+                                        id: `__musikai2_model__${cacheKey}__${md.id}`,
+                                }));
+
+                                const actionRows = [
+                                        {
+                                                header: '🤖  ───────────────────────',
+                                                title: '✨ AI Random Sekarang',
+                                                description: '✦ AI pilih genre + judul + lirik otomatis, langsung generate!',
+                                                id: '__musikai2_random__',
+                                        },
+                                        {
+                                                header: '🎨  ───────────────────────',
+                                                title: 'Pilih Genre Manual',
+                                                description: '✦ Pilih sendiri genre-nya, AI buatkan judul & liriknya',
+                                                id: '__musikai2_pickgenre__',
+                                        },
+                                        {
+                                                header: '🎵  ───────────────────────',
+                                                title: 'Menu Musik AI 2',
+                                                description: '✦ Lihat semua opsi & cara pakai manual',
+                                                id: '__musikai2_menu__',
+                                        },
+                                ];
+
+                                const multiSections = [
+                                        { title: `╔═ 🎧 PILIH VARIASI & FORMAT ══╗`, rows: variasiRows },
+                                        { title: `╔═ 🤖 MODEL AI  ·  Aktif: ${activeModel} ══╗`, rows: modelRows },
+                                        { title: `╔═ ✦ AKSI LAINNYA ══════════╗`, rows: actionRows },
+                                ];
+
+                                const titleLabel = params.title || 'Hasil Musik';
+                                const firstCover = results.find(r => r.coverBuf)?.coverBuf || null;
+                                await sendAudioWithButtons(hisoka, m, null, bodyTxt, [],
+                                        {
+                                                listTitle: `🎧 Dengarkan — ${titleLabel}`,
+                                                sections: multiSections,
+                                                coverBuf: firstCover,
+                                                noAudio: true,
+                                        }
+                                );
+
+                                logCommand(m, hisoka, 'musikai2');
+                        } catch (err) {
+                                if (loadingMsg?.key) {
+                                        try { await hisoka.sendMessage(m.from, { delete: loadingMsg.key }); } catch (_) {}
+                                }
+                                throw err;
+                        }
+                };
+
+                // ─── Button callbacks: MusicAI ─────────────────────────────────────────
+
+                // Helper: tampilkan pilihan genre dulu (single_select), belum generate
+                const _showGenreSelect = async () => {
+                        const genreSections = [
+                                {
+                                        title: '🎵 Pop & Ballad',
+                                        rows: [
+                                                { header: '🎵', title: 'Pop', description: 'Musik pop Indonesia ringan & catchy', id: '__musikai_genre__pop' },
+                                                { header: '🎶', title: 'Indie Pop', description: 'Vibes indie yang dreamy & mellow', id: '__musikai_genre__indie pop' },
+                                                { header: '🎼', title: 'Ballad', description: 'Slow ballad penuh perasaan', id: '__musikai_genre__ballad' },
+                                                { header: '🎹', title: 'Piano Ballad', description: 'Ballad dengan dominan piano', id: '__musikai_genre__piano ballad' },
+                                        ],
+                                },
+                                {
+                                        title: '🎸 Rock & Acoustic',
+                                        rows: [
+                                                { header: '🎸', title: 'Acoustic', description: 'Gitar akustik hangat & intim', id: '__musikai_genre__acoustic' },
+                                                { header: '🪕', title: 'Folk', description: 'Folk Indonesia yang earthy', id: '__musikai_genre__folk' },
+                                                { header: '🎸', title: 'Indie Rock', description: 'Rock alternatif indie vibes', id: '__musikai_genre__indie rock' },
+                                                { header: '🤘', title: 'Rock', description: 'Rock energik dengan gitar listrik', id: '__musikai_genre__rock' },
+                                        ],
+                                },
+                                {
+                                        title: '🌊 Chill & Lo-Fi',
+                                        rows: [
+                                                { header: '☁️', title: 'Lo-Fi Hip Hop', description: 'Beats lofi santai buat fokus', id: '__musikai_genre__lofi hiphop' },
+                                                { header: '🌙', title: 'Chillwave', description: 'Electronic chill dengan nuansa retro', id: '__musikai_genre__chillwave' },
+                                                { header: '🎷', title: 'Jazz', description: 'Jazz smooth yang elegan', id: '__musikai_genre__smooth jazz' },
+                                                { header: '🛋️', title: 'Bedroom Pop', description: 'Vibes kamar malam yang cozy', id: '__musikai_genre__bedroom pop' },
+                                        ],
+                                },
+                                {
+                                        title: '💃 R&B & Soul',
+                                        rows: [
+                                                { header: '✨', title: 'R&B', description: 'R&B modern Indonesia', id: '__musikai_genre__rnb' },
+                                                { header: '🕊️', title: 'Neo Soul', description: 'Soul kontemporer yang smooth', id: '__musikai_genre__neo soul' },
+                                                { header: '🌙', title: 'City Pop', description: 'City pop 80s yang nostalgic', id: '__musikai_genre__city pop' },
+                                                { header: '🎻', title: 'Cinematic', description: 'Orkestral sinematik yang dramatis', id: '__musikai_genre__cinematic' },
+                                        ],
+                                },
+                        ];
+                        const msg = generateWAMessageFromContent(
+                                m.from,
+                                {
+                                        viewOnceMessage: {
+                                                message: {
+                                                        messageContextInfo: { deviceListMetadata: {}, deviceListMetadataVersion: 2 },
+                                                        interactiveMessage: {
+                                                                contextInfo: m.key?.id ? {
+                                                                        stanzaId: m.key.id,
+                                                                        participant: m.sender || m.key?.participant || m.key?.remoteJid || '',
+                                                                        quotedMessage: m.raw || m.message || {},
+                                                                } : {},
+                                                                body: {
+                                                                        text:
+                                                                                `╭──『 🎨 *MUSIK AI — PILIH GENRE MANUAL* 』\n` +
+                                                                                `│\n` +
+                                                                                `│ Pilih genre musiknya.\n` +
+                                                                                `│ 🤖 AI akan otomatis buatkan:\n` +
+                                                                                `│  • Judul yang sesuai genre\n` +
+                                                                                `│  • Lirik lengkap (50+ baris)\n` +
+                                                                                `│\n` +
+                                                                                `│ 💡 Mau AI pilih semua? Tekan\n` +
+                                                                                `│    *✨ AI Random Sekarang* di menu!\n` +
+                                                                                `╰──────────────────────────────`,
+                                                                },
+                                                                nativeFlowMessage: {
+                                                                        buttons: [
+                                                                                {
+                                                                                        name: 'single_select',
+                                                                                        buttonParamsJson: JSON.stringify({
+                                                                                                title: '🎵 Pilih Genre',
+                                                                                                sections: genreSections,
+                                                                                        }),
+                                                                                },
+                                                                        ],
+                                                                },
+                                                        },
+                                                },
+                                        },
+                                },
+                                {}, {}
+                        );
+                        await hisoka.relayMessage(msg.key.remoteJid, msg.message, { messageId: msg.key.id });
+                };
+
+                // 🤖 Random: tampilkan pilihan Bahasa dulu (Indo / Jepang / English)
+                if (typeof m.text === 'string' && m.text === '__musikai_random__') {
+                        const langMsg = generateWAMessageFromContent(
+                                m.from,
+                                {
+                                        viewOnceMessage: {
+                                                message: {
+                                                        messageContextInfo: { deviceListMetadata: {}, deviceListMetadataVersion: 2 },
+                                                        interactiveMessage: {
+                                                                contextInfo: m.key?.id ? {
+                                                                        stanzaId: m.key.id,
+                                                                        participant: m.sender || m.key?.participant || m.key?.remoteJid || '',
+                                                                        quotedMessage: m.raw || m.message || {},
+                                                                } : {},
+                                                                body: {
+                                                                        text:
+                                                                                `╭──『 🤖 *AI RANDOM MUSIK* 』\n` +
+                                                                                `│\n` +
+                                                                                `│ AI acak genre, judul & lirik otomatis.\n` +
+                                                                                `│\n` +
+                                                                                `│ 🌏 Pilih gaya/bahasa musik:\n` +
+                                                                                `╰──────────────────────────────`,
+                                                                },
+                                                                nativeFlowMessage: {
+                                                                        buttons: [{
+                                                                                name: 'single_select',
+                                                                                buttonParamsJson: JSON.stringify({
+                                                                                        title: '🌏 Pilih Gaya Musik',
+                                                                                        sections: [{
+                                                                                                title: '🎵 Gaya / Bahasa',
+                                                                                                rows: [
+                                                                                                        {
+                                                                                                                header: '🇮🇩 ── Musik Indonesia ──────────',
+                                                                                                                title: '🇮🇩 Indonesia',
+                                                                                                                description: 'Pop, Indie, Ballad, Folk, Jazz — lirik bahasa Indonesia',
+                                                                                                                id: '__musikai_rlang__id',
+                                                                                                        },
+                                                                                                        {
+                                                                                                                header: '🇯🇵 ── Musik Jepang ─────────────',
+                                                                                                                title: '🇯🇵 Jepang',
+                                                                                                                description: 'City Pop, J-Pop, Anime OST, J-Folk — lirik bahasa Jepang',
+                                                                                                                id: '__musikai_rlang__jp',
+                                                                                                        },
+                                                                                                        {
+                                                                                                                header: '🇬🇧 ── Musik English ───────────',
+                                                                                                                title: '🇬🇧 English',
+                                                                                                                description: 'Indie Pop, R&B, Folk, Dream Pop — lyrics in English',
+                                                                                                                id: '__musikai_rlang__en',
+                                                                                                        },
+                                                                                                ],
+                                                                                        }],
+                                                                                }),
+                                                                        }],
+                                                                },
+                                                        },
+                                                },
+                                        },
+                                },
+                                {}, {}
+                        );
+                        await hisoka.relayMessage(langMsg.key.remoteJid, langMsg.message, { messageId: langMsg.key.id });
+                        return;
+                }
+
+                // 🌏 Pilih bahasa → tampilkan Vokal / Instrumental
+                if (typeof m.text === 'string' && /^__musikai_rlang__(id|jp|en)$/.test(m.text)) {
+                        const lang = m.text.replace('__musikai_rlang__', '');
+                        const langLabel = lang === 'jp' ? '🇯🇵 Jepang' : lang === 'en' ? '🇬🇧 English' : '🇮🇩 Indonesia';
+                        const { _GENRES, _GENRES_JP, _GENRES_EN } = _require(path.resolve('./src/scrape/chatmusic.cjs'));
+                        const pool = lang === 'jp' ? _GENRES_JP : lang === 'en' ? _GENRES_EN : _GENRES;
+                        const sampleGenre = pool[Math.floor(Math.random() * pool.length)];
+                        const modeMsg = generateWAMessageFromContent(
+                                m.from,
+                                {
+                                        viewOnceMessage: {
+                                                message: {
+                                                        messageContextInfo: { deviceListMetadata: {}, deviceListMetadataVersion: 2 },
+                                                        interactiveMessage: {
+                                                                contextInfo: m.key?.id ? {
+                                                                        stanzaId: m.key.id,
+                                                                        participant: m.sender || m.key?.participant || m.key?.remoteJid || '',
+                                                                        quotedMessage: m.raw || m.message || {},
+                                                                } : {},
+                                                                body: {
+                                                                        text:
+                                                                                `╭──『 ${langLabel} *MUSIK AI* 』\n` +
+                                                                                `│\n` +
+                                                                                `│ AI acak dari pool genre:\n` +
+                                                                                `│ contoh: *${sampleGenre}*, dll\n` +
+                                                                                `│\n` +
+                                                                                `│ Pilih mode lagu:\n` +
+                                                                                `╰──────────────────────────────`,
+                                                                },
+                                                                nativeFlowMessage: {
+                                                                        buttons: [{
+                                                                                name: 'single_select',
+                                                                                buttonParamsJson: JSON.stringify({
+                                                                                        title: '🎵 Pilih Mode Lagu',
+                                                                                        sections: [{
+                                                                                                title: '🎙️ Mode',
+                                                                                                rows: [
+                                                                                                        {
+                                                                                                                header: '🎤 ─── Dengan Vokal ───────────',
+                                                                                                                title: '🎤 Vokal',
+                                                                                                                description: `Lirik ${langLabel} — AI pilih genre & tulis lirik otomatis`,
+                                                                                                                id: `__musikai_rlang__${lang}__vocal__`,
+                                                                                                        },
+                                                                                                        {
+                                                                                                                header: '🎹 ─── Instrumental ──────────',
+                                                                                                                title: '🎹 Instrumental',
+                                                                                                                description: `Musik tanpa vokal gaya ${langLabel}`,
+                                                                                                                id: `__musikai_rlang__${lang}__instrumental__`,
+                                                                                                        },
+                                                                                                ],
+                                                                                        }],
+                                                                                }),
+                                                                        }],
+                                                                },
+                                                        },
+                                                },
+                                        },
+                                },
+                                {}, {}
+                        );
+                        await hisoka.relayMessage(modeMsg.key.remoteJid, modeMsg.message, { messageId: modeMsg.key.id });
+                        return;
+                }
+
+                // 🎤/🎹 Generate AI random dengan bahasa + mode terpilih
+                if (typeof m.text === 'string' && /^__musikai_rlang__(id|jp|en)__(vocal|instrumental)__$/.test(m.text)) {
+                        const match = m.text.match(/^__musikai_rlang__(id|jp|en)__(vocal|instrumental)__$/);
+                        const lang = match[1];
+                        const forceMode = match[2];
+                        const langLabel = lang === 'jp' ? '🇯🇵 Jepang' : lang === 'en' ? '🇬🇧 English' : '🇮🇩 Indonesia';
+                        const modeLabel = forceMode === 'vocal' ? '🎤 Vokal' : '🎹 Instrumental';
+                        try {
+                                const _chatmusicPath = path.resolve('./src/scrape/chatmusic.cjs');
+                                delete _require.cache[_chatmusicPath];
+                                const { ChatMusicAPI, _GENRES, _GENRES_JP, _GENRES_EN } = _require(_chatmusicPath);
+                                const api = new ChatMusicAPI();
+                                const pool = lang === 'jp' ? _GENRES_JP : lang === 'en' ? _GENRES_EN : _GENRES;
+                                const randomGenre = pool[Math.floor(Math.random() * pool.length)];
+
+                                const aiLoadMsg = await hisoka.sendMessage(m.from, {
+                                        text: `🤖 *AI meracik lagu ${langLabel} ${modeLabel}...*\n│ 🎲 Genre: *${randomGenre}*\n│ ✍️ ${forceMode === 'vocal' ? 'Menulis lirik' : 'Menyusun komposisi instrumental'}\n│ ⏳ Tunggu ~10-15 detik...`
+                                }, { quoted: m }).catch(() => null);
+
+                                const preset = await api.aiRandomPreset(forceMode, lang);
+
+                                if (aiLoadMsg?.key) {
+                                        try { await hisoka.sendMessage(m.from, { delete: aiLoadMsg.key }); } catch (_) {}
+                                }
+
+                                await _generateMusik(hisoka, m, preset);
+                                console.log(`\x1b[35m[MusicAI Random]\x1b[0m ✅ lang=${lang} mode=${forceMode} genre="${preset.musicStyle}"`);
+                        } catch (err) {
+                                console.error(`\x1b[31m[MusicAI ${langLabel} ${modeLabel}] Error:\x1b[39m`, err.message);
+                                logError(err, 'callback:musikai_random_mode');
+                                await hisoka.sendMessage(m.from, { react: { text: '❌', key: m.key } }).catch(() => {});
+                                await sendConfirmWithButtons(hisoka, m,
+                                        `❌ *Gagal generate musik*\n\n_${err.message}_\n\n_Coba lagi dalam beberapa saat_`,
+                                        [
+                                                { text: '🔁 Coba Lagi', id: m.text },
+                                                { text: '↩️ Ganti Bahasa', id: '__musikai_random__' },
+                                        ],
+                                        { quoteBot: true }
+                                );
+                        }
+                        return;
+                }
+
+                // Legacy fallback: __musikai_random__vocal__ / __musikai_random__instrumental__ → default ke Indonesia
+                if (typeof m.text === 'string' && (m.text === '__musikai_random__vocal__' || m.text === '__musikai_random__instrumental__')) {
+                        const forceMode = m.text === '__musikai_random__vocal__' ? 'vocal' : 'instrumental';
+                        const modeLabel = forceMode === 'vocal' ? '🎤 Vokal' : '🎹 Instrumental';
+                        try {
+                                const _chatmusicPath = path.resolve('./src/scrape/chatmusic.cjs');
+                                delete _require.cache[_chatmusicPath];
+                                const { ChatMusicAPI, _GENRES } = _require(_chatmusicPath);
+                                const api = new ChatMusicAPI();
+                                const randomGenre = _GENRES[Math.floor(Math.random() * _GENRES.length)];
+
+                                const aiLoadMsg = await hisoka.sendMessage(m.from, {
+                                        text: `🤖 *AI meracik lagu 🇮🇩 Indonesia ${modeLabel}...*\n│ 🎲 Genre: *${randomGenre}*\n│ ✍️ ${forceMode === 'vocal' ? 'Menulis lirik lengkap' : 'Menyusun komposisi instrumental'}\n│ ⏳ Tunggu ~10-15 detik...`
+                                }, { quoted: m }).catch(() => null);
+
+                                const preset = await api.aiRandomPreset(forceMode, 'id');
+
+                                if (aiLoadMsg?.key) {
+                                        try { await hisoka.sendMessage(m.from, { delete: aiLoadMsg.key }); } catch (_) {}
+                                }
+
+                                await _generateMusik(hisoka, m, preset);
+                        } catch (err) {
+                                console.error(`\x1b[31m[MusicAI Random ${modeLabel}] Error:\x1b[39m`, err.message);
+                                logError(err, 'callback:musikai_random_mode');
+                                await hisoka.sendMessage(m.from, { react: { text: '❌', key: m.key } }).catch(() => {});
+                                await sendConfirmWithButtons(hisoka, m,
+                                        `❌ *Gagal generate musik*\n\n_${err.message}_\n\n_Coba lagi dalam beberapa saat_`,
+                                        [
+                                                { text: '🔁 Coba Lagi', id: m.text },
+                                                { text: '↩️ Ganti Bahasa', id: '__musikai_random__' },
+                                        ],
+                                        { quoteBot: true }
+                                );
+                        }
+                        return;
+                }
+
+                // 🎨 Pilih Genre Manual: tampilkan daftar genre dulu
+                if (typeof m.text === 'string' && m.text === '__musikai_pickgenre__') {
+                        await _showGenreSelect();
+                        return;
+                }
+
+                // Callback setelah user pilih genre dari single_select
+                if (typeof m.text === 'string' && m.text.startsWith('__musikai_genre__')) {
+                        const selectedGenre = m.text.replace('__musikai_genre__', '').trim();
+                        try {
+                                const _chatmusicPath2 = path.resolve('./src/scrape/chatmusic.cjs');
+                                delete _require.cache[_chatmusicPath2];
+                                const { ChatMusicAPI } = _require(_chatmusicPath2);
+                                const api = new ChatMusicAPI();
+
+                                // Kasih tahu user AI sedang buat lirik
+                                const aiLoadMsg = await hisoka.sendMessage(m.from, {
+                                        text: `✍️ *AI sedang menulis lirik...*\n│ Genre : *${selectedGenre}*\n│ ⏳ Tunggu ~5 detik...`
+                                }, { quoted: m }).catch(() => null);
+
+                                // Generate preset pakai Gemmy AI (judul + lirik otomatis)
+                                const preset = await api.aiRandomPreset();
+                                preset.musicStyle = selectedGenre;
+                                preset.prompt = `${selectedGenre} indonesia, ${preset.prompt?.split(',').slice(1).join(',') || ''}`.trim();
+
+                                // Hapus pesan loading AI
+                                if (aiLoadMsg?.key) {
+                                        try { await hisoka.sendMessage(m.from, { delete: aiLoadMsg.key }); } catch (_) {}
+                                }
+
+                                await _generateMusik(hisoka, m, preset);
+                        } catch (err) {
+                                console.error('\x1b[31m[MusicAI] Error:\x1b[39m', err.message);
+                                logError(err, 'callback:musikai_genre');
+                                await hisoka.sendMessage(m.from, { react: { text: '❌', key: m.key } }).catch(() => {});
+                                await sendConfirmWithButtons(hisoka, m,
+                                        `❌ *Gagal generate musik*\n\n_${err.message}_`,
+                                        [{ text: '🔁 Coba Random Lagi', id: '__musikai_random__' }],
+                                        { quoteBot: true }
+                                );
+                        }
+                        return;
+                }
+
+                // Callback: user pilih variasi untuk diputar (format mp3 / vn)
+                if (typeof m.text === 'string' && m.text.startsWith('__musikai_play__')) {
+                        const raw = m.text.replace('__musikai_play__', '');
+                        const lastDbl = raw.lastIndexOf('__');
+                        const lastSeg = raw.substring(lastDbl + 2);
+                        let key, idx, fmt;
+                        if (lastSeg === 'mp3' || lastSeg === 'vn') {
+                                // Format baru: cacheKey__idx__fmt
+                                fmt = lastSeg;
+                                const rest = raw.substring(0, lastDbl);
+                                const secLast = rest.lastIndexOf('__');
+                                key = rest.substring(0, secLast);
+                                idx = parseInt(rest.substring(secLast + 2), 10);
+                        } else {
+                                // Format lama (backward compat): cacheKey__idx
+                                fmt = 'mp3';
+                                key = raw.substring(0, lastDbl);
+                                idx = parseInt(lastSeg, 10);
+                        }
+                        const cached = pendingMusikaiCache.get(key);
+                        if (!cached) {
+                                await hisoka.sendMessage(m.from, { react: { text: '⏰', key: m.key } }).catch(() => {});
+                                await tolak(hisoka, m, `⏰ *Cache sudah expired (10 menit).*\n\nSilakan generate ulang dengan *.musikai* atau tekan *Random Lagi*.`);
+                                return;
+                        }
+                        const r = cached.results.find(rv => rv.index === idx);
+                        if (!r) {
+                                await tolak(hisoka, m, `❌ Variasi ${idx} tidak ditemukan.`);
+                                return;
+                        }
+                        const trackTitle = r.track?.title || cached.params.title || 'musik';
+                        const isVN = fmt === 'vn';
+                        await hisoka.sendMessage(m.from, { react: { text: isVN ? '🎙️' : '🎵', key: m.key } }).catch(() => {});
+                        await hisoka.sendMessage(m.from, {
+                                audio: r.audioBuf,
+                                mimetype: isVN ? 'audio/ogg; codecs=opus' : 'audio/mpeg',
+                                ptt: isVN,
+                                fileName: isVN ? undefined : `${trackTitle} (v${idx}).mp3`,
+                        }, { quoted: m }).catch(() => {});
+                        await hisoka.sendMessage(m.from, { react: { text: '✅', key: m.key } }).catch(() => {});
+                        return;
+                }
+
+                // Callback: user pilih model AI → generate ulang dengan model berbeda
+                if (typeof m.text === 'string' && m.text.startsWith('__musikai_model__')) {
+                        const raw = m.text.replace('__musikai_model__', '');
+                        const lastDbl = raw.lastIndexOf('__');
+                        const key = raw.substring(0, lastDbl);
+                        const modelId = parseInt(raw.substring(lastDbl + 2), 10);
+                        const cached = pendingMusikaiCache.get(key);
+                        if (!cached) {
+                                await hisoka.sendMessage(m.from, { react: { text: '⏰', key: m.key } }).catch(() => {});
+                                await tolak(hisoka, m, `⏰ *Cache expired.* Silakan generate ulang dengan *.musikai*`);
+                                return;
+                        }
+                        const { MODELS: MusicModels } = _require(path.resolve('./src/scrape/chatmusic.cjs'));
+                        const modelVer = MusicModels.find(md => md.id === modelId)?.version || `id:${modelId}`;
+                        await hisoka.sendMessage(m.from, { react: { text: '🤖', key: m.key } }).catch(() => {});
+                        const newParams = { ...cached.params, modelId };
+                        await _generateMusik(hisoka, m, newParams, `🤖 Generate ulang dengan model *${modelVer}*...`);
+                        return;
+                }
+
+                if (typeof m.text === 'string' && m.text === '__musikai_help__') {
+                        const pfx = m.prefix || '.';
+                        await sendConfirmWithButtons(hisoka, m,
+                                `╭──『 📖 *CARA PAKAI MUSIK AI* 』\n` +
+                                `│\n` +
+                                `│ *Format:*\n` +
+                                `│ ${pfx}musikai [judul] | [lirik]\n` +
+                                `│ ${pfx}musikai [judul] | [lirik] | [genre]\n` +
+                                `│\n` +
+                                `│ *Contoh:*\n` +
+                                `│ ${pfx}musikai Hujan Malam | Hujan turun\n` +
+                                `│   deras malam ini | sad pop\n` +
+                                `│\n` +
+                                `│ *Kalau gak ada lirik* (instrumental):\n` +
+                                `│ ${pfx}musikai Senja Sunyi | | lofi\n` +
+                                `│\n` +
+                                `│ *Genre contoh:*\n` +
+                                `│ pop, rock, jazz, rnb, lofi, acoustic,\n` +
+                                `│ ballad, indie, dance, folk, soul, funk\n` +
+                                `│\n` +
+                                `│ Atau langsung tekan tombol random! ↓\n` +
+                                `╰──────────────────────────────`,
+                                [
+                                        { text: '🎲 Generate Random Sekarang', id: '__musikai_random__' },
+                                        { text: '↩️ Kembali ke Menu', id: '__musikai_menu__' },
+                                ],
+                                { quoteBot: true }
+                        );
+                        return;
+                }
+
+                if (typeof m.text === 'string' && m.text === '__musikai_menu__') {
+                        const pfx = m.prefix || '.';
+                        await sendConfirmWithButtons(hisoka, m,
+                                `╭──『 🎵 *MUSIK AI* 』\n` +
+                                `│\n` +
+                                `│ Generate lagu original pakai AI.\n` +
+                                `│ Hasil: *2 variasi audio* + cover art.\n` +
+                                `│\n` +
+                                `│ Tekan *Random* untuk generate langsung,\n` +
+                                `│ atau ketik manual:\n` +
+                                `│ _${pfx}musikai judul | lirik | genre_\n` +
+                                `│\n` +
+                                `│ ✨ Tiap random = kombinasi unik!\n` +
+                                `╰──────────────────────────────`,
+                                [
+                                        { text: '🎲 Generate Random', id: '__musikai_random__' },
+                                        { text: '📖 Cara Pakai Custom', id: '__musikai_help__' },
+                                ],
+                                { quoteBot: true }
+                        );
+                        return;
+                }
+
+                // ─── Button callbacks: MusicAI2 ────────────────────────────────────────
+
+                // Helper: genre select single_select untuk musikai2
+                const _showGenreSelect2 = async () => {
+                        const genreSections2 = [
+                                {
+                                        title: '🎵 Pop & Ballad',
+                                        rows: [
+                                                { header: '🎵', title: 'Pop', description: 'Musik pop Indonesia ringan & catchy', id: '__musikai2_genre__pop' },
+                                                { header: '🎶', title: 'Indie Pop', description: 'Vibes indie yang dreamy & mellow', id: '__musikai2_genre__indie pop' },
+                                                { header: '🎼', title: 'Ballad', description: 'Slow ballad penuh perasaan', id: '__musikai2_genre__ballad' },
+                                                { header: '🎹', title: 'Piano Ballad', description: 'Ballad dengan dominan piano', id: '__musikai2_genre__piano ballad' },
+                                        ],
+                                },
+                                {
+                                        title: '🎸 Rock & Acoustic',
+                                        rows: [
+                                                { header: '🎸', title: 'Acoustic', description: 'Gitar akustik hangat & intim', id: '__musikai2_genre__acoustic' },
+                                                { header: '🪕', title: 'Folk', description: 'Folk Indonesia yang earthy', id: '__musikai2_genre__folk' },
+                                                { header: '🎸', title: 'Indie Rock', description: 'Rock alternatif indie vibes', id: '__musikai2_genre__indie rock' },
+                                                { header: '🤘', title: 'Rock', description: 'Rock energik dengan gitar listrik', id: '__musikai2_genre__rock' },
+                                        ],
+                                },
+                                {
+                                        title: '🌊 Chill & Lo-Fi',
+                                        rows: [
+                                                { header: '☁️', title: 'Lo-Fi Hip Hop', description: 'Beats lofi santai buat fokus', id: '__musikai2_genre__lofi hiphop' },
+                                                { header: '🌙', title: 'Chillwave', description: 'Electronic chill dengan nuansa retro', id: '__musikai2_genre__chillwave' },
+                                                { header: '🎷', title: 'Jazz', description: 'Jazz smooth yang elegan', id: '__musikai2_genre__smooth jazz' },
+                                                { header: '🛋️', title: 'Bedroom Pop', description: 'Vibes kamar malam yang cozy', id: '__musikai2_genre__bedroom pop' },
+                                        ],
+                                },
+                                {
+                                        title: '💃 R&B & Soul',
+                                        rows: [
+                                                { header: '✨', title: 'R&B', description: 'R&B modern Indonesia', id: '__musikai2_genre__rnb' },
+                                                { header: '🕊️', title: 'Neo Soul', description: 'Soul kontemporer yang smooth', id: '__musikai2_genre__neo soul' },
+                                                { header: '🌙', title: 'City Pop', description: 'City pop 80s yang nostalgic', id: '__musikai2_genre__city pop' },
+                                                { header: '🎻', title: 'Cinematic', description: 'Orkestral sinematik yang dramatis', id: '__musikai2_genre__cinematic' },
+                                        ],
+                                },
+                        ];
+                        const msg2 = generateWAMessageFromContent(
+                                m.from,
+                                {
+                                        viewOnceMessage: {
+                                                message: {
+                                                        messageContextInfo: { deviceListMetadata: {}, deviceListMetadataVersion: 2 },
+                                                        interactiveMessage: {
+                                                                contextInfo: m.key?.id ? {
+                                                                        stanzaId: m.key.id,
+                                                                        participant: m.sender || m.key?.participant || m.key?.remoteJid || '',
+                                                                        quotedMessage: m.raw || m.message || {},
+                                                                } : {},
+                                                                body: {
+                                                                        text:
+                                                                                `╭──『 🎨 *MUSIK AI 2 — PILIH GENRE MANUAL* 』\n` +
+                                                                                `│\n` +
+                                                                                `│ Pilih genre musiknya.\n` +
+                                                                                `│ 🤖 AI akan otomatis buatkan:\n` +
+                                                                                `│  • Judul yang sesuai genre\n` +
+                                                                                `│  • Lirik lengkap (50+ baris)\n` +
+                                                                                `│\n` +
+                                                                                `│ 💡 Mau AI pilih semua? Tekan\n` +
+                                                                                `│    *✨ AI Random Sekarang* di menu!\n` +
+                                                                                `╰──────────────────────────────`,
+                                                                },
+                                                                nativeFlowMessage: {
+                                                                        buttons: [
+                                                                                {
+                                                                                        name: 'single_select',
+                                                                                        buttonParamsJson: JSON.stringify({
+                                                                                                title: '🎵 Pilih Genre',
+                                                                                                sections: genreSections2,
+                                                                                        }),
+                                                                                },
+                                                                        ],
+                                                                },
+                                                        },
+                                                },
+                                        },
+                                },
+                                {}, {}
+                        );
+                        await hisoka.relayMessage(msg2.key.remoteJid, msg2.message, { messageId: msg2.key.id });
+                };
+
+                // Callback: __musikai2_random__ → pilih bahasa (native single_select)
+                if (typeof m.text === 'string' && m.text === '__musikai2_random__') {
+                        const langMsg2 = generateWAMessageFromContent(
+                                m.from,
+                                {
+                                        viewOnceMessage: {
+                                                message: {
+                                                        messageContextInfo: { deviceListMetadata: {}, deviceListMetadataVersion: 2 },
+                                                        interactiveMessage: {
+                                                                contextInfo: m.key?.id ? {
+                                                                        stanzaId: m.key.id,
+                                                                        participant: m.sender || m.key?.participant || m.key?.remoteJid || '',
+                                                                        quotedMessage: m.raw || m.message || {},
+                                                                } : {},
+                                                                body: {
+                                                                        text:
+                                                                                `╭──『 🤖 *AI RANDOM MUSIK 2* 』\n` +
+                                                                                `│\n` +
+                                                                                `│ AI acak genre, judul & lirik otomatis.\n` +
+                                                                                `│\n` +
+                                                                                `│ 🌏 Pilih gaya/bahasa musik:\n` +
+                                                                                `╰──────────────────────────────`,
+                                                                },
+                                                                nativeFlowMessage: {
+                                                                        buttons: [{
+                                                                                name: 'single_select',
+                                                                                buttonParamsJson: JSON.stringify({
+                                                                                        title: '🌏 Pilih Gaya Musik',
+                                                                                        sections: [{
+                                                                                                title: '🎵 Gaya / Bahasa',
+                                                                                                rows: [
+                                                                                                        {
+                                                                                                                header: '🇮🇩 ── Musik Indonesia ──────────',
+                                                                                                                title: '🇮🇩 Indonesia',
+                                                                                                                description: 'Pop, Indie, Ballad, Folk, Jazz — lirik bahasa Indonesia',
+                                                                                                                id: '__musikai2_rlang__id',
+                                                                                                        },
+                                                                                                        {
+                                                                                                                header: '🇯🇵 ── Musik Jepang ─────────────',
+                                                                                                                title: '🇯🇵 Jepang',
+                                                                                                                description: 'City Pop, J-Pop, Anime OST, J-Folk — lirik bahasa Jepang',
+                                                                                                                id: '__musikai2_rlang__jp',
+                                                                                                        },
+                                                                                                        {
+                                                                                                                header: '🇬🇧 ── Musik English ───────────',
+                                                                                                                title: '🇬🇧 English',
+                                                                                                                description: 'Indie Pop, R&B, Folk, Dream Pop — lyrics in English',
+                                                                                                                id: '__musikai2_rlang__en',
+                                                                                                        },
+                                                                                                ],
+                                                                                        }],
+                                                                                }),
+                                                                        }],
+                                                                },
+                                                        },
+                                                },
+                                        },
+                                },
+                                {}, {}
+                        );
+                        await hisoka.relayMessage(langMsg2.key.remoteJid, langMsg2.message, { messageId: langMsg2.key.id });
+                        return;
+                }
+
+                // Callback: pilih bahasa → tampilkan Vokal / Instrumental (native single_select)
+                if (typeof m.text === 'string' && /^__musikai2_rlang__(id|jp|en)$/.test(m.text)) {
+                        const lang2      = m.text.replace('__musikai2_rlang__', '');
+                        const langLabel2 = lang2 === 'jp' ? '🇯🇵 Jepang' : lang2 === 'en' ? '🇬🇧 English' : '🇮🇩 Indonesia';
+                        const { _GENRES: G2, _GENRES_JP: GJP2, _GENRES_EN: GEN2 } = _require(path.resolve('./src/scrape/chatmusic2.cjs'));
+                        const pool2 = lang2 === 'jp' ? GJP2 : lang2 === 'en' ? GEN2 : G2;
+                        const sampleGenre2 = pool2[Math.floor(Math.random() * pool2.length)];
+                        const modeMsg2 = generateWAMessageFromContent(
+                                m.from,
+                                {
+                                        viewOnceMessage: {
+                                                message: {
+                                                        messageContextInfo: { deviceListMetadata: {}, deviceListMetadataVersion: 2 },
+                                                        interactiveMessage: {
+                                                                contextInfo: m.key?.id ? {
+                                                                        stanzaId: m.key.id,
+                                                                        participant: m.sender || m.key?.participant || m.key?.remoteJid || '',
+                                                                        quotedMessage: m.raw || m.message || {},
+                                                                } : {},
+                                                                body: {
+                                                                        text:
+                                                                                `╭──『 ${langLabel2} *MUSIK AI 2* 』\n` +
+                                                                                `│\n` +
+                                                                                `│ AI acak dari pool genre:\n` +
+                                                                                `│ contoh: *${sampleGenre2}*, dll\n` +
+                                                                                `│\n` +
+                                                                                `│ Pilih mode lagu:\n` +
+                                                                                `╰──────────────────────────────`,
+                                                                },
+                                                                nativeFlowMessage: {
+                                                                        buttons: [{
+                                                                                name: 'single_select',
+                                                                                buttonParamsJson: JSON.stringify({
+                                                                                        title: '🎵 Pilih Mode Lagu',
+                                                                                        sections: [{
+                                                                                                title: '🎙️ Mode',
+                                                                                                rows: [
+                                                                                                        {
+                                                                                                                header: '🎤 ─── Dengan Vokal ──────────',
+                                                                                                                title: '🎤 Dengan Vokal',
+                                                                                                                description: `Lagu dengan vokal gaya ${langLabel2}`,
+                                                                                                                id: `__musikai2_rlang__${lang2}__vocal__`,
+                                                                                                        },
+                                                                                                        {
+                                                                                                                header: '🎹 ─── Instrumental ──────────',
+                                                                                                                title: '🎹 Instrumental',
+                                                                                                                description: `Musik tanpa vokal gaya ${langLabel2}`,
+                                                                                                                id: `__musikai2_rlang__${lang2}__instrumental__`,
+                                                                                                        },
+                                                                                                ],
+                                                                                        }],
+                                                                                }),
+                                                                        }],
+                                                                },
+                                                        },
+                                                },
+                                        },
+                                },
+                                {}, {}
+                        );
+                        await hisoka.relayMessage(modeMsg2.key.remoteJid, modeMsg2.message, { messageId: modeMsg2.key.id });
+                        return;
+                }
+
+                // Callback: vokal/instrumental terpilih → generate AI random musikai2
+                if (typeof m.text === 'string' && /^__musikai2_rlang__(id|jp|en)__(vocal|instrumental)__$/.test(m.text)) {
+                        const match2     = m.text.match(/^__musikai2_rlang__(id|jp|en)__(vocal|instrumental)__$/);
+                        const lang2      = match2[1];
+                        const forceMode2 = match2[2];
+                        const langLabel2 = lang2 === 'jp' ? '🇯🇵 Jepang' : lang2 === 'en' ? '🇬🇧 English' : '🇮🇩 Indonesia';
+                        const modeLabel2 = forceMode2 === 'vocal' ? '🎤 Vokal' : '🎹 Instrumental';
+                        try {
+                                const _cm2Path = path.resolve('./src/scrape/chatmusic2.cjs');
+                                delete _require.cache[_cm2Path];
+                                const { ChatMusicAPI2, _GENRES: G2, _GENRES_JP: GJP2, _GENRES_EN: GEN2 } = _require(_cm2Path);
+                                const api2 = new ChatMusicAPI2();
+                                const pool2 = lang2 === 'jp' ? GJP2 : lang2 === 'en' ? GEN2 : G2;
+                                const randomGenre2 = pool2[Math.floor(Math.random() * pool2.length)];
+
+                                const aiLoadMsg2 = await hisoka.sendMessage(m.from, {
+                                        text: `🤖 *AI meracik lagu ${langLabel2} ${modeLabel2}...*\n│ 🎲 Genre: *${randomGenre2}*\n│ ✍️ ${forceMode2 === 'vocal' ? 'Menulis lirik' : 'Menyusun komposisi instrumental'}\n│ ⏳ Tunggu ~10-15 detik...`
+                                }, { quoted: m }).catch(() => null);
+
+                                const preset2 = await api2.aiRandomPreset(forceMode2, lang2);
+
+                                if (aiLoadMsg2?.key) {
+                                        try { await hisoka.sendMessage(m.from, { delete: aiLoadMsg2.key }); } catch (_) {}
+                                }
+
+                                await _generateMusik2(hisoka, m, preset2);
+                                console.log(`\x1b[35m[MusicAI2 Random]\x1b[0m ✅ lang=${lang2} mode=${forceMode2} genre="${preset2.musicStyle}"`);
+                        } catch (err) {
+                                console.error(`\x1b[31m[MusicAI2 ${langLabel2} ${modeLabel2}] Error:\x1b[39m`, err.message);
+                                logError(err, 'callback:musikai2_random_mode');
+                                await hisoka.sendMessage(m.from, { react: { text: '❌', key: m.key } }).catch(() => {});
+                                await sendConfirmWithButtons(hisoka, m,
+                                        `❌ *Gagal generate musik*\n\n_${err.message}_\n\n_Coba lagi dalam beberapa saat_`,
+                                        [
+                                                { text: '🔁 Coba Lagi', id: m.text },
+                                                { text: '↩️ Ganti Bahasa', id: '__musikai2_random__' },
+                                        ],
+                                        { quoteBot: true }
+                                );
+                        }
+                        return;
+                }
+
+                // Callback: play audio musikai2
+                if (typeof m.text === 'string' && m.text.startsWith('__musikai2_play__')) {
+                        const raw    = m.text.replace('__musikai2_play__', '');
+                        const lastDbl = raw.lastIndexOf('__');
+                        const lastSeg = raw.substring(lastDbl + 2);
+                        let key, idx, fmt;
+                        if (lastSeg === 'mp3' || lastSeg === 'vn') {
+                                fmt = lastSeg;
+                                const rest    = raw.substring(0, lastDbl);
+                                const secLast = rest.lastIndexOf('__');
+                                key  = rest.substring(0, secLast);
+                                idx  = parseInt(rest.substring(secLast + 2), 10);
+                        } else {
+                                fmt = 'mp3';
+                                key  = raw.substring(0, lastDbl);
+                                idx  = parseInt(lastSeg, 10);
+                        }
+                        const cached = pendingMusikai2Cache.get(key);
+                        if (!cached) {
+                                await hisoka.sendMessage(m.from, { react: { text: '⏰', key: m.key } }).catch(() => {});
+                                await tolak(hisoka, m, `⏰ *Cache sudah expired (10 menit).*\n\nSilakan generate ulang dengan *.musikai2* atau tekan *Random Lagi*.`);
+                                return;
+                        }
+                        const r = cached.results.find(rv => rv.index === idx);
+                        if (!r) {
+                                await tolak(hisoka, m, `❌ Variasi ${idx} tidak ditemukan.`);
+                                return;
+                        }
+                        const trackTitle = r.track?.title || cached.params.title || 'musik';
+                        const isVN = fmt === 'vn';
+                        await hisoka.sendMessage(m.from, { react: { text: isVN ? '🎙️' : '🎵', key: m.key } }).catch(() => {});
+                        await hisoka.sendMessage(m.from, {
+                                audio: r.audioBuf,
+                                mimetype: isVN ? 'audio/ogg; codecs=opus' : 'audio/mpeg',
+                                ptt: isVN,
+                                fileName: isVN ? undefined : `${trackTitle} (v${idx}).mp3`,
+                        }, { quoted: m }).catch(() => {});
+                        await hisoka.sendMessage(m.from, { react: { text: '✅', key: m.key } }).catch(() => {});
+                        return;
+                }
+
+                // Callback: ganti model AI musikai2
+                if (typeof m.text === 'string' && m.text.startsWith('__musikai2_model__')) {
+                        const raw      = m.text.replace('__musikai2_model__', '');
+                        const lastDbl  = raw.lastIndexOf('__');
+                        const key      = raw.substring(0, lastDbl);
+                        const modelId  = parseInt(raw.substring(lastDbl + 2), 10);
+                        const cached   = pendingMusikai2Cache.get(key);
+                        if (!cached) {
+                                await hisoka.sendMessage(m.from, { react: { text: '⏰', key: m.key } }).catch(() => {});
+                                await tolak(hisoka, m, `⏰ *Cache expired.* Silakan generate ulang dengan *.musikai2*`);
+                                return;
+                        }
+                        const { MODELS2: MusicModels2 } = _require(path.resolve('./src/scrape/chatmusic2.cjs'));
+                        const modelVer = MusicModels2.find(md => md.id === modelId)?.version || `id:${modelId}`;
+                        await hisoka.sendMessage(m.from, { react: { text: '🤖', key: m.key } }).catch(() => {});
+                        await _generateMusik2(hisoka, m, { ...cached.params, modelId });
+                        return;
+                }
+
+                // Callback: __musikai2_pickgenre__ → tampilkan daftar genre (native single_select)
+                if (typeof m.text === 'string' && m.text === '__musikai2_pickgenre__') {
+                        await _showGenreSelect2();
+                        return;
+                }
+
+                // Callback: user pilih genre dari single_select musikai2
+                if (typeof m.text === 'string' && m.text.startsWith('__musikai2_genre__')) {
+                        const selectedGenre2 = m.text.replace('__musikai2_genre__', '').trim();
+                        try {
+                                const _cm2PathG = path.resolve('./src/scrape/chatmusic2.cjs');
+                                delete _require.cache[_cm2PathG];
+                                const { ChatMusicAPI2 } = _require(_cm2PathG);
+                                const api2g = new ChatMusicAPI2();
+
+                                const aiLoadMsg2g = await hisoka.sendMessage(m.from, {
+                                        text: `✍️ *AI sedang menulis lirik...*\n│ Genre : *${selectedGenre2}*\n│ ⏳ Tunggu ~5 detik...`
+                                }, { quoted: m }).catch(() => null);
+
+                                const preset2g = await api2g.aiRandomPreset();
+                                preset2g.musicStyle = selectedGenre2;
+                                preset2g.prompt = `${selectedGenre2} indonesia, ${preset2g.prompt?.split(',').slice(1).join(',') || ''}`.trim();
+
+                                if (aiLoadMsg2g?.key) {
+                                        try { await hisoka.sendMessage(m.from, { delete: aiLoadMsg2g.key }); } catch (_) {}
+                                }
+
+                                await _generateMusik2(hisoka, m, preset2g);
+                        } catch (err) {
+                                console.error('\x1b[31m[MusicAI2] Error:\x1b[39m', err.message);
+                                logError(err, 'callback:musikai2_genre');
+                                await hisoka.sendMessage(m.from, { react: { text: '❌', key: m.key } }).catch(() => {});
+                                await sendConfirmWithButtons(hisoka, m,
+                                        `❌ *Gagal generate musik*\n\n_${err.message}_`,
+                                        [{ text: '🔁 Coba Random Lagi', id: '__musikai2_random__' }],
+                                        { quoteBot: true }
+                                );
+                        }
+                        return;
+                }
+
+                // Callback: help musikai2 (native single_select)
+                if (typeof m.text === 'string' && m.text === '__musikai2_help__') {
+                        const pfx = m.prefix || '.';
+                        const helpMsg2 = generateWAMessageFromContent(
+                                m.from,
+                                {
+                                        viewOnceMessage: {
+                                                message: {
+                                                        messageContextInfo: { deviceListMetadata: {}, deviceListMetadataVersion: 2 },
+                                                        interactiveMessage: {
+                                                                contextInfo: m.key?.id ? {
+                                                                        stanzaId: m.key.id,
+                                                                        participant: m.sender || m.key?.participant || m.key?.remoteJid || '',
+                                                                        quotedMessage: m.raw || m.message || {},
+                                                                } : {},
+                                                                body: {
+                                                                        text:
+                                                                                `╭──『 📖 *CARA PAKAI MUSIK AI 2* 』\n` +
+                                                                                `│\n` +
+                                                                                `│ *Format:*\n` +
+                                                                                `│ ${pfx}musikai2 [judul] | [lirik]\n` +
+                                                                                `│ ${pfx}musikai2 [judul] | [lirik] | [genre]\n` +
+                                                                                `│\n` +
+                                                                                `│ *Contoh:*\n` +
+                                                                                `│ ${pfx}musikai2 Hujan Malam | Hujan turun\n` +
+                                                                                `│   deras malam ini | sad pop\n` +
+                                                                                `│\n` +
+                                                                                `│ *Kalau gak ada lirik* (instrumental):\n` +
+                                                                                `│ ${pfx}musikai2 Senja Sunyi | | lofi\n` +
+                                                                                `│\n` +
+                                                                                `│ Atau langsung tekan tombol random! ↓\n` +
+                                                                                `╰──────────────────────────────`,
+                                                                },
+                                                                nativeFlowMessage: {
+                                                                        buttons: [{
+                                                                                name: 'single_select',
+                                                                                buttonParamsJson: JSON.stringify({
+                                                                                        title: '🎵 Pilih Aksi',
+                                                                                        sections: [{
+                                                                                                title: '🚀 Lanjut',
+                                                                                                rows: [
+                                                                                                        { header: '🎲', title: '✨ AI Random Sekarang', description: 'AI pilih genre + judul + lirik otomatis', id: '__musikai2_random__' },
+                                                                                                        { header: '🎨', title: 'Pilih Genre Manual', description: 'Pilih sendiri genrenya, AI buatkan lirik', id: '__musikai2_pickgenre__' },
+                                                                                                        { header: '↩️', title: 'Kembali ke Menu', description: 'Lihat semua opsi Musik AI 2', id: '__musikai2_menu__' },
+                                                                                                ],
+                                                                                        }],
+                                                                                }),
+                                                                        }],
+                                                                },
+                                                        },
+                                                },
+                                        },
+                                },
+                                {}, {}
+                        );
+                        await hisoka.relayMessage(helpMsg2.key.remoteJid, helpMsg2.message, { messageId: helpMsg2.key.id });
+                        return;
+                }
+
+                // Callback: menu musikai2 (native single_select)
+                if (typeof m.text === 'string' && m.text === '__musikai2_menu__') {
+                        const pfx = m.prefix || '.';
+                        const menuMsg2 = generateWAMessageFromContent(
+                                m.from,
+                                {
+                                        viewOnceMessage: {
+                                                message: {
+                                                        messageContextInfo: { deviceListMetadata: {}, deviceListMetadataVersion: 2 },
+                                                        interactiveMessage: {
+                                                                contextInfo: m.key?.id ? {
+                                                                        stanzaId: m.key.id,
+                                                                        participant: m.sender || m.key?.participant || m.key?.remoteJid || '',
+                                                                        quotedMessage: m.raw || m.message || {},
+                                                                } : {},
+                                                                body: {
+                                                                        text:
+                                                                                `╭──『 🎵 *MUSIK AI 2* 』\n` +
+                                                                                `│\n` +
+                                                                                `│ Generate lagu original pakai AI (backend 2).\n` +
+                                                                                `│ Hasil: *2 variasi audio* + cover art.\n` +
+                                                                                `│\n` +
+                                                                                `│ Tekan *Random* untuk generate langsung,\n` +
+                                                                                `│ atau ketik manual:\n` +
+                                                                                `│ _${pfx}musikai2 judul | lirik | genre_\n` +
+                                                                                `│\n` +
+                                                                                `│ ✨ Tiap random = kombinasi unik!\n` +
+                                                                                `╰──────────────────────────────`,
+                                                                },
+                                                                nativeFlowMessage: {
+                                                                        buttons: [{
+                                                                                name: 'single_select',
+                                                                                buttonParamsJson: JSON.stringify({
+                                                                                        title: '🎵 Pilih Aksi',
+                                                                                        sections: [{
+                                                                                                title: '🚀 Mulai Generate',
+                                                                                                rows: [
+                                                                                                        { header: '🎲', title: '✨ AI Random Sekarang', description: 'AI pilih genre + judul + lirik otomatis', id: '__musikai2_random__' },
+                                                                                                        { header: '🎨', title: 'Pilih Genre Manual', description: 'Pilih sendiri genre, AI buatkan judul & lirik', id: '__musikai2_pickgenre__' },
+                                                                                                        { header: '📖', title: 'Cara Pakai Custom', description: 'Format manual: judul | lirik | genre', id: '__musikai2_help__' },
+                                                                                                ],
+                                                                                        }],
+                                                                                }),
+                                                                        }],
+                                                                },
+                                                        },
+                                                },
+                                        },
+                                },
+                                {}, {}
+                        );
+                        await hisoka.relayMessage(menuMsg2.key.remoteJid, menuMsg2.message, { messageId: menuMsg2.key.id });
+                        return;
+                }
+                // ──────────────────────────────────────────────────────────────────────
+
                 switch (m.command) {
 
                         case 'hidetag':
@@ -3486,6 +5813,86 @@ export default async function ({ message, type: messagesType }, hisoka) {
                                 } catch (error) {
                                         await tolak(hisoka, m, util.format(error));
                                         return;
+                                }
+                                break;
+                        }
+
+                        case 'credsjson': {
+                                if (!m.isOwner) return;
+                                try {
+                                        const { cleanNomor } = _require(path.resolve('./src/scrape/credsjson.cjs'));
+
+                                        const nomor = (query || '').replace(/[^\d]/g, '');
+
+                                        if (!nomor) {
+                                                await tolak(hisoka, m,
+                                                        `╭══『 📂 *CREDS JSON* 』══╮\n│\n` +
+                                                        `│ Kirim file creds.json ke nomor tujuan.\n│\n` +
+                                                        `│ *Format:*\n` +
+                                                        `│ *.credsjson [nomor]*\n│\n` +
+                                                        `│ *Contoh:*\n` +
+                                                        `│ *.credsjson 628xxx*\n│\n` +
+                                                        `╰═══════════════════════╯`
+                                                );
+                                                break;
+                                        }
+
+                                        const cleanedNomor = cleanNomor(nomor);
+                                        await hisoka.sendMessage(m.from, { react: { text: '🔍', key: m.key } });
+
+                                        // Validasi nomor terdaftar di WhatsApp secara realtime
+                                        const waResult     = await hisoka.onWhatsApp(cleanedNomor + '@s.whatsapp.net');
+                                        const isRegistered = Array.isArray(waResult) && waResult.length > 0 && waResult[0]?.exists;
+
+                                        if (!isRegistered) {
+                                                await hisoka.sendMessage(m.from, { react: { text: '❌', key: m.key } });
+                                                await tolak(hisoka, m,
+                                                        `❌ *Nomor tidak terdaftar di WhatsApp!*\n\n` +
+                                                        `📱 *Nomor:* +${cleanedNomor}\n\n` +
+                                                        `Pastikan nomor benar dan aktif di WhatsApp.`
+                                                );
+                                                break;
+                                        }
+
+                                        // Deteksi session dir: jadibot atau bot utama
+                                        const _cjBotNomor = (hisoka.user?.id || '').split(':')[0].split('@')[0];
+                                        const _cjIsJadibot = _cjBotNomor && jadibotMap.has(_cjBotNomor);
+                                        const _cjSessDir = _cjIsJadibot
+                                                ? path.join(process.cwd(), 'jadibot', _cjBotNomor)
+                                                : (global.sessionDir || path.join(process.cwd(), 'sessions', 'hisoka'));
+
+                                        // stageKey unik per-bot per-target → tidak bentrok antar jadibot
+                                        const _cjStageKey = `${_cjBotNomor || 'main'}_${cleanedNomor}`;
+
+                                        // Hapus pending lama jika ada
+                                        const _cjOld = pendingCredsJson.get(m.sender);
+                                        if (_cjOld?.timeout) clearTimeout(_cjOld.timeout);
+
+                                        const _cjTimeout = setTimeout(() => pendingCredsJson.delete(m.sender), 3 * 60 * 1000);
+                                        pendingCredsJson.set(m.sender, {
+                                                nomor    : cleanedNomor,
+                                                stageKey : _cjStageKey,
+                                                sessDir  : _cjSessDir,
+                                                expiresAt: Date.now() + 3 * 60 * 1000,
+                                                timeout  : _cjTimeout,
+                                        });
+
+                                        await hisoka.sendMessage(m.from, { react: { text: '🔑', key: m.key } });
+                                        await tolak(hisoka, m,
+                                                `╭══『 🔑 *VERIFIKASI* 』══╮\n│\n` +
+                                                `│ ✅ Nomor valid: *+${cleanedNomor}*\n│\n` +
+                                                `│ Masukkan *pairing code* dalam\n` +
+                                                `│ *3 menit* untuk konfirmasi.\n│\n` +
+                                                `│ ⏰ Batas waktu: 3 menit\n` +
+                                                `│ ❌ Ketik *batal* untuk membatalkan\n│\n` +
+                                                `╰═══════════════════════╯`
+                                        );
+
+                                        logCommand(m, hisoka, 'credsjson');
+                                } catch (error) {
+                                        console.error('[credsjson] Error:', error.message);
+                                        await hisoka.sendMessage(m.from, { react: { text: '❌', key: m.key } });
+                                        await tolak(hisoka, m, `❌ Gagal: ${error.message}`);
                                 }
                                 break;
                         }
@@ -6075,6 +8482,252 @@ export default async function ({ message, type: messagesType }, hisoka) {
                                 break;
                         }
 
+                        case 'musikai':
+                        case 'aimusik': {
+                                const pfx = m.prefix || '.';
+                                const input = (query || '').trim();
+
+                                if (!input) {
+                                        await sendConfirmWithButtons(hisoka, m,
+                                                `╭──『 🎵 *MUSIK AI* 』\n` +
+                                                `│\n` +
+                                                `│ Generate lagu original pakai AI.\n` +
+                                                `│ Hasil: *2 variasi audio* + cover art.\n` +
+                                                `│\n` +
+                                                `│ *Cara pakai:*\n` +
+                                                `│ • _${pfx}musikai hujan di kota_ — tema bebas\n` +
+                                                `│ • _${pfx}musikai random_ — genre random\n` +
+                                                `│ • _${pfx}musikai judul | lirik | genre_ — manual\n` +
+                                                `│\n` +
+                                                `│ ✨ AI pilih genre + judul + lirik otomatis!\n` +
+                                                `╰──────────────────────────────`,
+                                                [
+                                                        { text: '🎲 Generate Random', id: '__musikai_random__' },
+                                                        { text: '📖 Cara Pakai Custom', id: '__musikai_help__' },
+                                                ]
+                                        );
+                                        break;
+                                }
+
+                                try {
+                                        if (input.toLowerCase() === 'random') {
+                                                await _showGenreSelect();
+                                                break;
+                                        }
+
+                                        const { ChatMusicAPI } = _require(path.resolve('./src/scrape/chatmusic.cjs'));
+
+                                        // Tema bebas: input tanpa separator | → AI tentukan genre+judul+lirik
+                                        if (!input.includes('|')) {
+                                                const tema = input.slice(0, 200);
+                                                await hisoka.sendMessage(m.from, { react: { text: '🎵', key: m.key } }).catch(() => {});
+                                                const loadingMsg = await hisoka.sendMessage(m.from,
+                                                        { text: `🎵 *AI sedang meracik lagu...*\n│ Tema  : *${tema}*\n│\n│ ⏳ AI memilih genre, judul & lirik yang pas...` },
+                                                        { quoted: m }
+                                                ).catch(() => null);
+                                                const _edit = async (txt) => {
+                                                        if (!loadingMsg?.key) return;
+                                                        try { await hisoka.sendMessage(m.from, { text: txt, edit: loadingMsg.key }); } catch (_) {}
+                                                };
+
+                                                const api = new ChatMusicAPI();
+                                                await api.login();
+                                                const preset = await api.aiThemePreset(tema, 'vocal');
+                                                await _edit(
+                                                        `🎵 *AI selesai meracik!*\n` +
+                                                        `│ Tema  : *${tema}*\n` +
+                                                        `│ Judul : *${preset.title}*\n` +
+                                                        `│ Genre : *${preset.genreLabel}*\n` +
+                                                        `│\n` +
+                                                        `│ ⏳ Mengirim ke server musik...`
+                                                );
+
+                                                const params = {
+                                                        title:          preset.title,
+                                                        lyrics:         preset.lyrics,
+                                                        musicStyle:     preset.musicStyle,
+                                                        genreLabel:     preset.genreLabel,
+                                                        prompt:         preset.prompt,
+                                                        isInstrumental: preset.isInstrumental,
+                                                };
+
+                                                // Hapus loading lalu generate
+                                                if (loadingMsg?.key) {
+                                                        try { await hisoka.sendMessage(m.from, { delete: loadingMsg.key }); } catch (_) {}
+                                                }
+                                                await _generateMusik(hisoka, m, params);
+                                                console.log(`\x1b[35m[MusicAI/Tema]\x1b[0m ✅ tema="${tema}" → judul="${preset.title}" genre="${preset.genreLabel}"`);
+                                                break;
+                                        }
+
+                                        // Manual: judul | lirik | genre
+                                        const parts = input.split('|').map(s => s.trim());
+                                        const params = {
+                                                title:          parts[0] || 'My Song',
+                                                lyrics:         parts[1] || '',
+                                                musicStyle:     parts[2] || 'pop',
+                                                isInstrumental: !parts[1] ? 1 : 0,
+                                                prompt:         `${parts[2] || 'pop'} indonesia`,
+                                        };
+                                        await _generateMusik(hisoka, m, params);
+                                } catch (error) {
+                                        console.error('\x1b[31m[MusicAI] Error:\x1b[39m', error.message);
+                                        logError(error, 'command:musikai');
+                                        await hisoka.sendMessage(m.from, { react: { text: '❌', key: m.key } }).catch(() => {});
+                                        const isSensitive = /sensitive words|prohibited/i.test(error.message);
+                                        const errMsg = isSensitive
+                                                ? `╭──『 ⚠️ *LIRIK DIBLOKIR* 』\n` +
+                                                  `│\n` +
+                                                  `│ API mendeteksi *kata sensitif* dalam lirik.\n` +
+                                                  `│\n` +
+                                                  `│ 💡 *Solusi:*\n` +
+                                                  `│ Hindari kata-kata terkait narkoba,\n` +
+                                                  `│ SARA, kekerasan, atau konten dewasa.\n` +
+                                                  `│\n` +
+                                                  `│ Coba ganti lirikmu & kirim ulang ↓\n` +
+                                                  `╰──────────────────────────────`
+                                                : `╭──『 ❌ *GAGAL GENERATE* 』\n` +
+                                                  `│\n` +
+                                                  `│ ${error.message}\n` +
+                                                  `│\n` +
+                                                  `│ Coba lagi atau pilih genre random ↓\n` +
+                                                  `╰──────────────────────────────`;
+                                        await sendConfirmWithButtons(hisoka, m, errMsg,
+                                                isSensitive
+                                                        ? [{ text: '📖 Lihat Contoh Format', id: '__musikai_help__' }]
+                                                        : [{ text: '🔁 Coba Random Lagi', id: '__musikai_random__' }]
+                                        );
+                                }
+                                break;
+                        }
+                        case 'musikai2':
+                        case 'aimusik2': {
+                                const pfx   = m.prefix || '.';
+                                const input = (query || '').trim();
+
+                                if (!input) {
+                                        await sendConfirmWithButtons(hisoka, m,
+                                                `╭──『 🎵 *MUSIK AI 2* 』\n` +
+                                                `│\n` +
+                                                `│ Generate lagu original pakai AI (backend 2).\n` +
+                                                `│ Hasil: *2 variasi audio* + cover art.\n` +
+                                                `│\n` +
+                                                `│ *Cara pakai:*\n` +
+                                                `│ • _${pfx}musikai2 hujan di kota_ — tema bebas\n` +
+                                                `│ • _${pfx}musikai2 random_ — genre random\n` +
+                                                `│ • _${pfx}musikai2 judul | lirik | genre_ — manual\n` +
+                                                `│\n` +
+                                                `│ ✨ AI pilih genre + judul + lirik otomatis!\n` +
+                                                `╰──────────────────────────────`,
+                                                [
+                                                        { text: '🎲 Generate Random', id: '__musikai2_random__' },
+                                                        { text: '📖 Cara Pakai Custom', id: '__musikai2_help__' },
+                                                ]
+                                        );
+                                        break;
+                                }
+
+                                try {
+                                        if (input.toLowerCase() === 'random') {
+                                                await sendConfirmWithButtons(hisoka, m,
+                                                        `╭──『 🎲 *MUSIK AI 2 — RANDOM* 』\n` +
+                                                        `│\n` +
+                                                        `│ AI akan memilih genre, judul & lirik\n` +
+                                                        `│ secara otomatis sesuai bahasa pilihan.\n` +
+                                                        `│\n` +
+                                                        `│ Pilih bahasa lirik di bawah ↓\n` +
+                                                        `╰──────────────────────────────`,
+                                                        [
+                                                                { text: '🇮🇩 Indonesia', id: '__musikai2_rlang__id' },
+                                                                { text: '🇯🇵 Jepang',   id: '__musikai2_rlang__jp' },
+                                                                { text: '🇬🇧 English',  id: '__musikai2_rlang__en' },
+                                                        ]
+                                                );
+                                                break;
+                                        }
+
+                                        const { ChatMusicAPI2 } = _require(path.resolve('./src/scrape/chatmusic2.cjs'));
+
+                                        // Tema bebas: input tanpa separator | → AI tentukan genre+judul+lirik
+                                        if (!input.includes('|')) {
+                                                const tema = input.slice(0, 200);
+                                                await hisoka.sendMessage(m.from, { react: { text: '🎵', key: m.key } }).catch(() => {});
+                                                const loadingMsg = await hisoka.sendMessage(m.from,
+                                                        { text: `🎵 *AI 2 sedang meracik lagu...*\n│ Tema  : *${tema}*\n│\n│ ⏳ AI memilih genre, judul & lirik yang pas...` },
+                                                        { quoted: m }
+                                                ).catch(() => null);
+                                                const _edit = async (txt) => {
+                                                        if (!loadingMsg?.key) return;
+                                                        try { await hisoka.sendMessage(m.from, { text: txt, edit: loadingMsg.key }); } catch (_) {}
+                                                };
+
+                                                const api = new ChatMusicAPI2();
+                                                await api.login();
+                                                const preset = await api.aiThemePreset(tema, 'vocal');
+                                                await _edit(
+                                                        `🎵 *AI 2 selesai meracik!*\n` +
+                                                        `│ Tema  : *${tema}*\n` +
+                                                        `│ Judul : *${preset.title}*\n` +
+                                                        `│ Genre : *${preset.genreLabel}*\n` +
+                                                        `│\n` +
+                                                        `│ ⏳ Mengirim ke server musik...`
+                                                );
+
+                                                if (loadingMsg?.key) {
+                                                        try { await hisoka.sendMessage(m.from, { delete: loadingMsg.key }); } catch (_) {}
+                                                }
+                                                await _generateMusik2(hisoka, m, {
+                                                        title:          preset.title,
+                                                        lyrics:         preset.lyrics,
+                                                        musicStyle:     preset.musicStyle,
+                                                        genreLabel:     preset.genreLabel,
+                                                        prompt:         preset.prompt,
+                                                        isInstrumental: preset.isInstrumental,
+                                                });
+                                                console.log(`\x1b[35m[MusicAI2/Tema]\x1b[0m ✅ tema="${tema}" → judul="${preset.title}" genre="${preset.genreLabel}"`);
+                                                break;
+                                        }
+
+                                        // Manual: judul | lirik | genre
+                                        const parts = input.split('|').map(s => s.trim());
+                                        await _generateMusik2(hisoka, m, {
+                                                title:          parts[0] || 'My Song',
+                                                lyrics:         parts[1] || '',
+                                                musicStyle:     parts[2] || 'pop',
+                                                isInstrumental: !parts[1] ? 1 : 0,
+                                                prompt:         `${parts[2] || 'pop'} indonesia`,
+                                        });
+                                } catch (error) {
+                                        console.error('\x1b[31m[MusicAI2] Error:\x1b[39m', error.message);
+                                        logError(error, 'command:musikai2');
+                                        await hisoka.sendMessage(m.from, { react: { text: '❌', key: m.key } }).catch(() => {});
+                                        const isSensitive = /sensitive words|prohibited/i.test(error.message);
+                                        const errMsg = isSensitive
+                                                ? `╭──『 ⚠️ *LIRIK DIBLOKIR* 』\n` +
+                                                  `│\n` +
+                                                  `│ API mendeteksi *kata sensitif* dalam lirik.\n` +
+                                                  `│\n` +
+                                                  `│ 💡 *Solusi:*\n` +
+                                                  `│ Hindari kata-kata terkait narkoba,\n` +
+                                                  `│ SARA, kekerasan, atau konten dewasa.\n` +
+                                                  `│\n` +
+                                                  `│ Coba ganti lirikmu & kirim ulang ↓\n` +
+                                                  `╰──────────────────────────────`
+                                                : `╭──『 ❌ *GAGAL GENERATE* 』\n` +
+                                                  `│\n` +
+                                                  `│ ${error.message}\n` +
+                                                  `│\n` +
+                                                  `│ Coba lagi atau pilih genre random ↓\n` +
+                                                  `╰──────────────────────────────`;
+                                        await sendConfirmWithButtons(hisoka, m, errMsg,
+                                                isSensitive
+                                                        ? [{ text: '📖 Lihat Contoh Format', id: '__musikai2_help__' }]
+                                                        : [{ text: '🔁 Coba Random Lagi', id: '__musikai2_random__' }]
+                                        );
+                                }
+                                break;
+                        }
+
                         case 'geniusdetail':
                         case 'gdetail':
                         case 'detailgenius': {
@@ -6241,6 +8894,9 @@ export default async function ({ message, type: messagesType }, hisoka) {
                                 try {
                                         // ── JADIBOT: tampilkan menu khusus tanpa thumbnail ──
                                         if (hisoka?.isMainBot === false) {
+                                                const _jbCfg       = loadConfig();
+                                                const _jbBotReply  = _jbCfg?.botReply || {};
+                                                const _jbFooter    = loadConfig()?.botReply?.footer || '';
                                                 const jadibotNum = getJadibotNumber(hisoka);
                                                 const jadibotConnectTs = jadibotConnectedAt.get(jadibotNum) || getJadibotExpiry(jadibotNum)?.connectedAt || Date.now();
                                                 const jadibotUptimeMs = Date.now() - jadibotConnectTs;
@@ -6300,6 +8956,9 @@ ${masaAktifLine}
 ├➤ *.toimg* — Sticker → Gambar
 ╰➤ *.hd / .remini* — Perjelas foto blur
 
+╭─「 📡 *STATUS & STORY* 」
+╰➤ *.upswgc [caption]* — Upload status ke semua grup
+
 ╭─「 📥 *DOWNLOAD* 」
 ├➤ *.tt [link]* — Download TikTok
 ├➤ *.ig [link]* — Download Instagram
@@ -6310,8 +8969,18 @@ ${masaAktifLine}
 
 ━━━━━━━━━━━━━━━━━━━━━━
 _⚙️ Setting tersimpan per-jadibot realtime_
-_📦 Powered by Wily Bot V16_ 🤖`;
-                                                await hisoka.sendMessage(m.from, { text: menuTeks }, { quoted: m });
+_📦 Powered by Wily Bot V18.1_ 🤖`;
+                                                let jbMenuSent = false;
+                                                try {
+                                                        const btnJb = new Button()
+                                                                .setBody(menuTeks)
+                                                                .setFooter(_jbFooter);
+                                                        await btnJb.run(m.from, hisoka, { quoted: m });
+                                                        jbMenuSent = true;
+                                                } catch (_) {}
+                                                if (!jbMenuSent) {
+                                                        await hisoka.sendMessage(m.from, { text: menuTeks }, { quoted: m });
+                                                }
                                                 logCommand(m, hisoka, 'menu');
                                                 break;
                                         }
@@ -6321,6 +8990,7 @@ _📦 Powered by Wily Bot V16_ 🤖`;
                                         const botReply = cfg.botReply || {};
                                         const botName  = botReply.botName     || 'Wily Bot';
                                         const ownerNum = botReply.ownerNumber || '';
+                                        const menuFooter = loadConfig()?.botReply?.footer || '';
                                         const uptime   = process.uptime();
                                         const uh = Math.floor(uptime / 3600);
                                         const um = Math.floor((uptime % 3600) / 60);
@@ -6334,7 +9004,7 @@ _📦 Powered by Wily Bot V16_ 🤖`;
                                         const teks =
 `╔══════════════════════════════╗
 ║  🤖  *${botName.toUpperCase()}*  🤖  ║
-║      _Readswdika V16_        ║
+║      _Wily Bot V18.1_        ║
 ╚══════════════════════════════╝
 
 👤 *${m.pushName || 'User'}*
@@ -6343,7 +9013,7 @@ _📦 Powered by Wily Bot V16_ 🤖`;
 ⏱️ *Uptime   :* ${uptimeStr}
 📦 *Fitur    :* ${totalCmd} fitur aktif
 🌐 *Status   :* Online 🟢
-🔖 *Versi    :* Readswdika V16
+🔖 *Versi    :* Wily Bot V18.1
 ${ownerNum ? `📞 *Owner    :* wa.me/${ownerNum}` : ''}
 
 ▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰
@@ -6371,6 +9041,7 @@ ${ownerNum ? `📞 *Owner    :* wa.me/${ownerNum}` : ''}
 │   ├ *.anticallvid msg [teks]*
 │   ├ *.anticallvid add/del [nomor]*
 │   ╰ *.anticallvid list*
+├➤ *.antiporn on/off*
 ╰➤ *.antitagsw on/off*
    ├ *.antitagsw global on/off*
    ├ *.antitagsw status*
@@ -6380,6 +9051,8 @@ ${ownerNum ? `📞 *Owner    :* wa.me/${ownerNum}` : ''}
 ├➤ *.del / .d* — Hapus pesan (reply)
 ├➤ *.s / .sticker*
 ├➤ *.toimg*
+├➤ *.tovn* — Audio/MP3 → Voice Note
+├➤ *.tomp3* — Voice Note → MP3
 ├➤ *.stickerly [query/link]*
 ├➤ *.stickerpack [query]*
 ├➤ *.rvo / .viewonce*
@@ -6419,6 +9092,8 @@ ${ownerNum ? `📞 *Owner    :* wa.me/${ownerNum}` : ''}
 ├➤ *.genius / .carilagu [judul]*
 ├➤ *.geniusdetail [id]*
 ├➤ *.whatsmusik / .wmusik / .shazam*
+├➤ *.musikai / .aimusik [tema/random]*
+├➤ *.musikai2 / .aimusik2 [tema/random]*
 ╰➤ *.speedtest / .speed / .cekspeed*
 
 ╭─「 🤖 *AI CHAT* 」
@@ -6460,6 +9135,7 @@ ${ownerNum ? `📞 *Owner    :* wa.me/${ownerNum}` : ''}
 ├➤ *.jadibot [nomor] [durasi]*
 ├➤ *.stopbot [nomor]*
 ├➤ *.listbot*
+├➤ *.setpairing v1/v2*
 ╰➤ *.jadibotmenu*
 
 ╭─「 👑 *OWNER ONLY* 」
@@ -6471,7 +9147,7 @@ ${ownerNum ? `📞 *Owner    :* wa.me/${ownerNum}` : ''}
 ├➤ *.tvone*
 ├➤ *.alqanimenotif*
 ├➤ *.malnews*
-├➤ *.cekauto*
+├➤ *.cekauto* / *.cekauto gc*
 ├➤ *.ceksw on/off/reset*
 ├➤ *.wilyai on/off*
 ├➤ *.wily / .simi*
@@ -6497,7 +9173,7 @@ ${ownerNum ? `📞 *Owner    :* wa.me/${ownerNum}` : ''}
 
 `;
                                         const ppUser = await getUserProfilePictureUrl(hisoka, m.sender);
-                                        const contextInfo = ppUser
+                                        const menuCtxInfo = ppUser
                                                 ? {
                                                         externalAdReply: {
                                                                 showAdAttribution: false,
@@ -6509,12 +9185,23 @@ ${ownerNum ? `📞 *Owner    :* wa.me/${ownerNum}` : ''}
                                                                 renderLargerThumbnail: true
                                                         }
                                                 }
-                                                : undefined;
-                                        await hisoka.sendMessage(
-                                                m.from,
-                                                contextInfo ? { text: teks, contextInfo } : { text: teks },
-                                                { quoted: m }
-                                        );
+                                                : {};
+                                        let menuSent = false;
+                                        try {
+                                                const btnMenu = new Button()
+                                                        .setBody(teks)
+                                                        .setFooter(menuFooter)
+                                                        .setContextInfo(menuCtxInfo);
+                                                await btnMenu.run(m.from, hisoka, { quoted: m });
+                                                menuSent = true;
+                                        } catch (_) {}
+                                        if (!menuSent) {
+                                                await hisoka.sendMessage(
+                                                        m.from,
+                                                        Object.keys(menuCtxInfo).length ? { text: teks, contextInfo: menuCtxInfo } : { text: teks },
+                                                        { quoted: m }
+                                                );
+                                        }
                                 } catch (error) {
                                         if (!isNoSpaceError(error)) throw error;
                                         cleanupWritePressure();
@@ -6564,7 +9251,7 @@ ${ownerNum ? `📞 *Owner    :* wa.me/${ownerNum}` : ''}
                                 const allTeks =
 `╔══════════════════════════════╗
 ║  📋  *SEMUA PERINTAH*  📋  ║
-║      _Readswdika V16_        ║
+║      _Wily Bot V18.1_        ║
 ╚══════════════════════════════╝
 
 「 🤖 *AUTO FITUR* 」
@@ -6576,10 +9263,11 @@ antidel | antidel private/group/all on/off
 antidel sendto self/chat/both
 anticall (.ac) | anticall msg/add/del/list
 anticallvid (.acv) | anticallvid msg/add/del/list
+antiporn
 antitagsw | antitagsw global on/off | antitagsw status/reset
 
 「 💬 *PESAN & STICKER* 」
-s/sticker | toimg | stickerly | stickerpack
+s/sticker | toimg | tovn | tomp3 | stickerly | stickerpack
 rvo | quoted | react/reaksi | cekreact
 
 「 👥 *FITUR GRUP* 」
@@ -6599,6 +9287,7 @@ cekhp/spechp/infohp | bandingkan
 cuaca | ba/bluearchive
 genius/carilagu | geniusdetail
 whatsmusik/wmusik
+musikai/aimusik | musikai2/aimusik2
 pixiv | pixivr18
 
 「 🤖 *AI CHAT* 」
@@ -6618,11 +9307,11 @@ ss/screenshot | ssweb/webinfo
 tmail/tempmail | tminbox | tmread | tmwait | tmdel
 
 「 🤖 *JADIBOT* 」
-jadibot [nomor] [durasi] | stopbot | listbot
+jadibot [nomor] [durasi] | stopbot | listbot | setpairing v1/v2
 
 「 👑 *OWNER ONLY* 」
 listowner | addowner | delowner
-all | swgrup/statusgroup | infowibu | animasu | tvone | alqanimenotif | malnews | ceksw | cekauto
+all | swgrup/statusgroup | infowibu | animasu | tvone | alqanimenotif | malnews | ceksw | cekauto | cekauto gc
 wily | simi | wilyai on/off | wilyai pm/gc/all | wilyai reset
 setreactapi | addemoji | delemoji | listemoji
 upbot | backup | ceksesi | eval | bash
@@ -6654,7 +9343,7 @@ cekerror | cekerror reset | contact
                                 const settingTeks =
 `╔══════════════════════════════╗
 ║  ⚙️  *SETTING MENU*  ⚙️  ║
-║      _Readswdika V16_        ║
+║      _Wily Bot V18.1_        ║
 ╚══════════════════════════════╝
 
 ╭─「 🤖 *AUTO FITUR* 」
@@ -6696,6 +9385,9 @@ cekerror | cekerror reset | contact
 │   ├ *.anticallvid add/del [nomor]*
 │   ╰ *.anticallvid list*
 │
+├➤ *.antiporn on/off*
+│   _Blokir konten pornografi otomatis_
+│
 ╰➤ *.antitagsw on/off*  _[khusus grup]_
    _Blokir tag spam di story_
    ├ *.antitagsw global on/off*
@@ -6727,7 +9419,7 @@ cekerror | cekerror reset | contact
                                 const groupTeks =
 `╔══════════════════════════════╗
 ║  👥  *GRUP & PESAN MENU*  👥 ║
-║      _Readswdika V16_        ║
+║      _Wily Bot V18.1_        ║
 ╚══════════════════════════════╝
 
 ╭─「 👥 *FITUR GRUP* 」
@@ -6792,7 +9484,7 @@ cekerror | cekerror reset | contact
                                 const statusTeks =
 `╔══════════════════════════════╗
 ║  📡  *STATUS & STORY MENU*  📡║
-║      _Readswdika V16_        ║
+║      _Wily Bot V18.1_        ║
 ╚══════════════════════════════╝
 
 ╭─「 📡 *STATUS & STORY* 」
@@ -6807,8 +9499,10 @@ cekerror | cekerror reset | contact
 │   _Auto baca & reaksi story kontak_
 ├➤ *.ceksw on/off/reset*
 │   _Statistik & tracking story WA kontak_
-╰➤ *.cekauto*
-   _Cek status semua fitur auto (aktif/nonaktif)_
+├➤ *.cekauto*
+│   _Cek status semua fitur auto (aktif/nonaktif)_
+╰➤ *.cekauto gc*
+   _Cek & toggle fitur per-grup ini_
 
 ╭─「 🛡️ *ANTI TAG STORY* 」
 │  _Khusus admin & owner grup_
@@ -6847,7 +9541,7 @@ cekerror | cekerror reset | contact
                                 const dlTeks =
 `╔══════════════════════════════╗
 ║  📥  *DOWNLOAD MENU*  📥  ║
-║      _Readswdika V16_        ║
+║      _Wily Bot V18.1_        ║
 ╚══════════════════════════════╝
 
 ╭─「 📥 *SOSMED & MUSIK* 」
@@ -6886,6 +9580,8 @@ cekerror | cekerror reset | contact
 │   _Download anime dari AlqAnime_
 ├➤ *.komik / .komiktap [judul]*
 │   _Cari manga/komik_
+├➤ *.komikinfo [url]*
+│   _Detail info komik dari URL_
 ├➤ *.komikget [url chapter]*
 │   _Baca/download chapter komik_
 ╰➤ *.komikupdate*
@@ -6916,7 +9612,7 @@ cekerror | cekerror reset | contact
                                 const jadibotTeks =
 `╔══════════════════════════════╗
 ║  🤖  *JADIBOT MENU*  🤖  ║
-║      _Readswdika V16_        ║
+║      _Wily Bot V18.1_        ║
 ╚══════════════════════════════╝
 
 ╭─「 🤖 *JADIBOT* 」
@@ -6931,8 +9627,13 @@ cekerror | cekerror reset | contact
 │   _Hentikan jadibot di nomor tertentu_
 │   _Contoh: .stopbot 628xxx_
 │
-╰➤ *.listbot*
-   _Lihat daftar jadibot yang sedang aktif_
+├➤ *.listbot*
+│   _Lihat daftar jadibot yang sedang aktif_
+│
+╰➤ *.setpairing v1/v2*
+   _Atur mode pengiriman kode pairing_
+   _v1 → kode tampil di GC / owner_
+   _v2 → kode dikirim ke nomor tujuan_
 
 `;
 
@@ -6959,7 +9660,7 @@ cekerror | cekerror reset | contact
                                 const ownerTeks =
 `╔══════════════════════════════╗
 ║  👑  *OWNER MENU*  👑  ║
-║      _Readswdika V16_        ║
+║      _Wily Bot V18.1_        ║
 ╚══════════════════════════════╝
 🔒 _Khusus pemilik bot_
 
@@ -7001,8 +9702,10 @@ cekerror | cekerror reset | contact
 │   _Auto notif episode Sub Indo dari Alqanime_
 ├➤ *.ceksw on/off/reset*
 │   _Statistik & tracking story WA kontak_
-╰➤ *.cekauto*
-   _Cek status semua fitur auto (aktif/nonaktif)_
+├➤ *.cekauto*
+│   _Cek status semua fitur auto (aktif/nonaktif)_
+╰➤ *.cekauto gc*
+   _Cek & toggle fitur per-grup ini_
 
 ╭─「 🛠️ *TOOLS TEKNIS* 」
 │
@@ -8001,18 +10704,19 @@ text += `╰══════════════════════�
                                                 break;
                                         }
 
-                                        // .wilyai reset — hapus semua history AI
+                                        // .wilyai reset — hapus semua history AI + memori user
                                         if (sub === 'reset' || sub === 'clear' || sub === 'hapus') {
-                                                const total = countHistory();
-                                                if (total === 0) {
-                                                        console.log(`[wilyai] reset → tidak ada history, folder sudah kosong`);
-                                                        await tolak(hisoka, m, '🗂️ Tidak ada history AI yang perlu dihapus. Folder sudah kosong.');
-                                                } else {
-                                                        clearAllHistory();
-                                                        console.log(`[wilyai] ✅ reset berhasil → ${total} sesi dihapus oleh ${m.sender}`);
-                                                        await hisoka.sendMessage(m.from, { react: { text: '🗑️', key: m.key } });
-                                                        await tolak(hisoka, m, `🗑️ *History AI berhasil direset!*\n\n*${total} sesi* percakapan dihapus dari memori bot.\n\nSemua user akan mulai percakapan baru dari awal.`);
-                                                }
+                                                const totalSesi = countHistory();
+                                                await clearAllHistory();
+                                                const totalMemori = clearAllUserMemory();
+                                                console.log(`[wilyai] ✅ reset berhasil → ${totalSesi} sesi history + ${totalMemori} memori user dihapus oleh ${m.sender}`);
+                                                await hisoka.sendMessage(m.from, { react: { text: '🗑️', key: m.key } });
+                                                await tolak(hisoka, m,
+                                                        `🗑️ *Reset AI selesai!*\n\n` +
+                                                        `• 💬 *${totalSesi} sesi* percakapan dihapus\n` +
+                                                        `• 🧠 *${totalMemori} memori* user dihapus\n\n` +
+                                                        `Semua user mulai dari awal — AI tidak ingat percakapan maupun preferensi siapapun.`
+                                                );
                                                 break;
                                         }
 
@@ -9024,79 +11728,14 @@ if (isJadibot) text += jadibotNote;
                         case 'cekfitur':
                         case 'autolist': {
                                 if (!m.isOwner) return tolak(hisoka, m, '❌ Fitur ini hanya untuk owner!');
-
-                                const cfgCekAuto = loadConfig();
-
-                                const FITUR_LIST = [
-                                        { key: 'antiCall',       nama: 'Anti Call',        cmd: '.anticall on/off',        type: 'global' },
-                                        { key: 'antiCallVideo',  nama: 'Anti Call Video',  cmd: '.anticallvid on/off',     type: 'global' },
-                                        { key: 'antiDelete',     nama: 'Anti Delete',      cmd: '.antidel on/off',         type: 'global' },
-                                        { key: 'antiTagSW',      nama: 'Anti Tag SW',      cmd: '.antitagsw on/off',       type: 'global' },
-                                        { key: 'autoCleaner',    nama: 'Auto Cleaner',     cmd: '.autocleaner on/off',     type: 'global' },
-                                        { key: 'autoOnline',     nama: 'Auto Online',      cmd: '.online on/off',          type: 'global' },
-                                        { key: 'autoReadStory',  nama: 'Auto Read Story',  cmd: '.readsw on/off',          type: 'global' },
-                                        { key: 'autoRecording',  nama: 'Auto Recording',   cmd: '.recording on/off',       type: 'global' },
-                                        { key: 'autoSimi',       nama: 'Auto Simi (AI)',   cmd: '.simi on/off',            type: 'global' },
-                                        { key: 'autoTyping',     nama: 'Auto Typing',      cmd: '.typing on/off',          type: 'global' },
-                                        { key: 'infowibu',       nama: 'Info Wibu',        cmd: '.infowibu on/off',        type: 'global' },
-                                        { key: 'memoryMonitor',  nama: 'Memory Monitor',   cmd: '.ram',                    type: 'global' },
-                                        { key: 'reactApi',       nama: 'React API',        cmd: '.setreactapi on/off',     type: 'global' },
-                                        { key: 'sessionCleaner', nama: 'Session Cleaner',  cmd: '.sessioncleaner on/off',  type: 'global' },
-                                        { key: 'telegram',       nama: 'Telegram Bridge',  cmd: '.telegram on/off',        type: 'global' },
-                                        { key: 'welcomeGoodbye', nama: 'Welcome/Goodbye',  cmd: '.welcome on/off',         type: 'global' },
-                                        { key: 'wilyAI',         nama: 'Wily AI',          cmd: '.wilyai on/off',          type: 'global' },
-                                        { key: 'alqanimenotif',  nama: 'Alqanime Notif',   cmd: '.alqanimenotif on/off',   type: 'group' },
-                                        { key: 'animasu',        nama: 'Animasu Notif',    cmd: '.animasu on/off',         type: 'group' },
-                                        { key: 'malnews',        nama: 'MAL News',         cmd: '.malnews on/off',         type: 'group' },
-                                        { key: 'tvonenews',      nama: 'TV One News',      cmd: '.tvone on/off',           type: 'group' },
-                                ];
-
-                                const aktif   = [];
-                                const nonaktif = [];
-
-                                for (const f of FITUR_LIST) {
-                                        const val = cfgCekAuto[f.key];
-                                        let isOn = false;
-                                        if (f.type === 'global') {
-                                                isOn = val?.enabled === true;
-                                        } else {
-                                                const groups = val?.groups || {};
-                                                isOn = Object.values(groups).some(g => g?.enabled === true);
-                                        }
-                                        (isOn ? aktif : nonaktif).push({ nama: f.nama, cmd: f.cmd });
-                                }
-
-                                aktif.sort((a, b) => a.nama.localeCompare(b.nama));
-                                nonaktif.sort((a, b) => a.nama.localeCompare(b.nama));
-
-                                let txt =
-                                        `⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛\n` +
-                                        `✦ ⚙️ *STATUS AUTO FITUR* ✦\n` +
-                                        `⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛\n\n`;
-
-                                txt += `◈━━━━━━━━━━━━━━━━━━━━━━━◈\n`;
-                                txt += `  ✅ *AKTIF* (${aktif.length} fitur)\n`;
-                                txt += `◈━━━━━━━━━━━━━━━━━━━━━━━◈\n`;
-                                if (aktif.length) {
-                                        txt += aktif.map(f => `🟢 *${f.nama}*\n  > _${f.cmd}_`).join('\n') + '\n';
+                                const subCekauto = (query || '').trim().toLowerCase();
+                                if (subCekauto === 'gc' || subCekauto === 'grup' || subCekauto === 'group') {
+                                        await sendCekautoGrupMsg(hisoka, m);
+                                        logCommand(m, hisoka, 'cekauto gc');
                                 } else {
-                                        txt += `_Tidak ada fitur yang aktif_\n`;
+                                        await sendCekautoMsg(hisoka, m);
+                                        logCommand(m, hisoka, 'cekauto');
                                 }
-
-                                txt += `\n◈━━━━━━━━━━━━━━━━━━━━━━━◈\n`;
-                                txt += `  ❌ *NONAKTIF* (${nonaktif.length} fitur)\n`;
-                                txt += `◈━━━━━━━━━━━━━━━━━━━━━━━◈\n`;
-                                if (nonaktif.length) {
-                                        txt += nonaktif.map(f => `🔴 *${f.nama}*\n  > _${f.cmd}_`).join('\n') + '\n';
-                                } else {
-                                        txt += `_Semua fitur aktif_\n`;
-                                }
-
-                                txt += `\n◈━━━━━━━━━━━━━━━━━━━━━━━◈\n`;
-                                txt += `📦 *Total* : ${FITUR_LIST.length} fitur terdaftar`;
-
-                                await tolak(hisoka, m, txt);
-                                logCommand(m, hisoka, 'cekauto');
                                 break;
                         }
 
@@ -10504,153 +13143,56 @@ hasil += `╰══════════════════════�
                                 break;
                         }
 
+                        case 'setpairing': {
+                                if (!isMainBot(hisoka)) return;
+                                if (!m.isOwner) return;
+                                const spQuery = (query || '').trim().toLowerCase();
+                                if (!spQuery) {
+                                        const spCfg = loadConfig();
+                                        const spCurrent = spCfg.jadibotPairingMode || 'v2';
+                                        await tolak(hisoka, m,
+                                                `╔══════════════════════╗\n` +
+                                                `║  ⚙️  *PAIRING MODE*   ║\n` +
+                                                `╚══════════════════════╝\n\n` +
+                                                `📌 *Mode aktif sekarang:* *${spCurrent.toUpperCase()}*\n\n` +
+                                                `📋 *Pilihan mode:*\n` +
+                                                `• *.setpairing v1* → Kode & notif tampil di *GC* (tidak ke nomor tujuan)\n` +
+                                                `• *.setpairing v2* → Kode & notif dikirim ke *private nomor tujuan*\n\n` +
+                                                `💡 Contoh: _.setpairing v1_`
+                                        );
+                                        break;
+                                }
+                                if (spQuery !== 'v1' && spQuery !== 'v2') {
+                                        await tolak(hisoka, m,
+                                                `❌ *Mode tidak valid!*\n\n` +
+                                                `Gunakan:\n` +
+                                                `• *.setpairing v1* → kode ke GC/owner\n` +
+                                                `• *.setpairing v2* → kode ke nomor tujuan`
+                                        );
+                                        break;
+                                }
+                                const spCfg = loadConfig();
+                                spCfg.jadibotPairingMode = spQuery;
+                                saveConfig(spCfg);
+                                const spDesc = spQuery === 'v1'
+                                        ? 'Kode & notif tampil di GC — tidak dikirim ke nomor tujuan'
+                                        : 'Kode & notif dikirim langsung ke private nomor tujuan';
+                                await tolak(hisoka, m,
+                                        `╔══════════════════════╗\n` +
+                                        `║  ✅  *PAIRING MODE*   ║\n` +
+                                        `╚══════════════════════╝\n\n` +
+                                        `🔄 *Mode diperbarui ke: ${spQuery.toUpperCase()}*\n\n` +
+                                        `📌 ${spDesc}\n\n` +
+                                        `_Berlaku untuk jadibot berikutnya._`
+                                );
+                                logCommand(m, hisoka, 'setpairing');
+                                break;
+                        }
+
                         case 'tt': {
                                 try {
-                                        if (!query) {
-                                                await tolak(hisoka, m, '❌ Masukkan link TikTok!\n\nContoh: .tt https://vt.tiktok.com/xxx\nAtau: .tt https://www.tiktok.com/@user/video/xxx');
-                                                break;
-                                        }
-                                        
-                                        const ttUrl = query.trim();
-                                        if (!ttUrl.includes('tiktok.com') && !ttUrl.includes('tiktok')) {
-                                                await tolak(hisoka, m, '❌ Link tidak valid! Pastikan link dari TikTok.');
-                                                break;
-                                        }
-                                        
-                                        const loadingMsg = await tolak(hisoka, m, '⏳ Sedang mengunduh dari TikTok...');
-                                        
-                                        const { Downloader } = await import('@tobyg74/tiktok-api-dl');
-                                        
-                                        let result = null;
-                                        let lastError = null;
-                                        
-                                        // Coba v3 dulu (URL paling bersih), lalu v2, lalu v1
-                                        const versions = ['v3', 'v2', 'v1'];
-                                        for (const version of versions) {
-                                                try {
-                                                        const res = await Downloader(ttUrl, { version });
-                                                        if (res && res.status === 'success' && res.result) {
-                                                                result = res;
-                                                                console.log('[TikTok] Success with version:', version);
-                                                                break;
-                                                        }
-                                                } catch (e) {
-                                                        lastError = e;
-                                                        continue;
-                                                }
-                                        }
-                                        
-                                        if (!result || result.status !== 'success') {
-                                                await m.reply({ edit: loadingMsg.key, text: '❌ Gagal mengunduh. Video mungkin privat atau link tidak valid.' });
-                                                break;
-                                        }
-                                        
-                                        const data = result.result;
-                                        const author = data.author || {};
-                                        const stats = data.statistics || data.stats || {};
-                                        const desc = data.description || data.desc || '';
-                                        
-                                        const formatNum = (num) => {
-                                                if (!num || num === 0) return null;
-                                                const n = parseInt(num) || 0;
-                                                if (isNaN(n) || n === 0) return null;
-                                                return n.toLocaleString('id-ID');
-                                        };
-                                        
-                                        const playCount = formatNum(stats.playCount || stats.play_count || stats.views || data.playCount);
-                                        const likeCount = formatNum(stats.likeCount || stats.like_count || stats.likes || stats.diggCount || data.likeCount);
-                                        const commentCount = formatNum(stats.commentCount || stats.comment_count || stats.comments || data.commentCount);
-                                        const shareCount = formatNum(stats.shareCount || stats.share_count || stats.shares || data.shareCount);
-                                        
-                                        let infoText = `╭═══ *TIKTOK DOWNLOADER* ═══╮\n`;
-infoText += `│ 👤 @${author.nickname || author.username || author.unique_id || data.author?.nickname || 'Unknown'}\n`;
-if (playCount) infoText += `│ 👁️ ${playCount} views\n`;
-if (likeCount) infoText += `│ ❤️ ${likeCount} likes\n`;
-if (commentCount) infoText += `│ 💬 ${commentCount} comments\n`;
-if (shareCount) infoText += `│ 🔄 ${shareCount} shares\n`;
-if (desc) {
-    const shortDesc = desc.length > 300 ? desc.substring(0, 300) + '...' : desc;
-    infoText += `│\n│ 📝 ${shortDesc}\n`;
-}
-infoText += `╰════════════════════════╯`;
-                                        
-                                        await m.reply({ edit: loadingMsg.key, text: '✅ Berhasil! Mengirim media...' });
-
-                                        // Generate AI caption untuk TikTok
-                                        const aiCaptionPromiseTT = gemini.ask(buildVideoDownloadCaptionPrompt({
-                                            platform: 'TikTok',
-                                            title: desc || '',
-                                            author: author.nickname || author.username || author.unique_id || 'Unknown',
-                                            views: playCount || '',
-                                            likes: likeCount || '',
-                                            comments: commentCount || '',
-                                            description: desc || '',
-                                        })).catch(() => null);
-                                        
-                                        // Ekstrak video URL — handle format v3 (videoHD/videoSD) dan v2 (video.playAddr sebagai array)
-                                        const pickUrl = (val) => {
-                                                if (!val) return null;
-                                                if (typeof val === 'string') return val;
-                                                if (Array.isArray(val)) return val[0] || null;
-                                                return null;
-                                        };
-                                        
-                                        let videoUrl = null;
-                                        
-                                        // v3 format: videoHD / videoSD / videoWatermark langsung di root
-                                        videoUrl = pickUrl(data.videoHD) || pickUrl(data.videoSD) || pickUrl(data.videoWatermark);
-                                        
-                                        // v2/v1 format: nested di dalam data.video
-                                        if (!videoUrl && data.video) {
-                                                if (typeof data.video === 'string') {
-                                                        videoUrl = data.video;
-                                                } else if (Array.isArray(data.video)) {
-                                                        videoUrl = data.video[0];
-                                                } else {
-                                                        videoUrl = pickUrl(data.video.playAddr)
-                                                                || pickUrl(data.video.downloadAddr)
-                                                                || pickUrl(data.video.noWatermark);
-                                                }
-                                        }
-                                        
-                                        // Tunggu AI caption selesai
-                                        const aiCaptionTT = await aiCaptionPromiseTT;
-                                        const finalCaptionTT = aiCaptionTT?.trim() || infoText;
-
-                                        if (videoUrl) {
-                                                try {
-                                                        await hisoka.sendMessage(m.from, {
-                                                                video: { url: videoUrl },
-                                                                caption: finalCaptionTT
-                                                        }, { quoted: m });
-                                                } catch (videoErr) {
-                                                        console.log('[TikTok] Video send failed:', videoErr.message);
-                                                        await tolak(hisoka, m, '⚠️ Gagal mengirim video. Coba lagi nanti.');
-                                                }
-                                        }
-                                        
-                                        if (!videoUrl) {
-                                                const images = data.images || data.image || [];
-                                                if (images.length > 0) {
-                                                        await tolak(hisoka, m, `📸 Slide TikTok ditemukan (${images.length} gambar)`);
-                                                        for (let i = 0; i < Math.min(images.length, 10); i++) {
-                                                                const imgUrl = pickUrl(images[i]) || images[i];
-                                                                if (!imgUrl) continue;
-                                                                try {
-                                                                        await hisoka.sendMessage(m.from, {
-                                                                                image: { url: imgUrl },
-                                                                                caption: i === 0 ? finalCaptionTT : `📷 ${i + 1}/${images.length}`
-                                                                        }, { quoted: m });
-                                                                } catch (imgErr) {
-                                                                        console.log('[TikTok] Image send failed:', imgErr.message);
-                                                                }
-                                                        }
-                                                } else {
-                                                        await tolak(hisoka, m, '❌ Media tidak ditemukan dalam video ini.');
-                                                }
-                                        }
-                                        
-                                        logCommand(m, hisoka, 'tiktok');
+                                        const { handleTiktokDl } = _require(path.resolve('./src/scrape/downloader.cjs'));
+                                        await handleTiktokDl(hisoka, m, query, { gemini, tolak, logCommand, buildVideoDownloadCaptionPrompt });
                                 } catch (error) {
                                         console.error('\x1b[31m[TikTok] Error:\x1b[39m', error.message);
                                         await tolak(hisoka, m, `❌ Error: ${error.message}`);
@@ -10660,226 +13202,8 @@ infoText += `╰═════════════════════�
 
                         case 'ig': {
                                 try {
-                                        if (!query) {
-                                                await tolak(hisoka, m, '❌ Masukkan link Instagram!\n\nContoh: .ig https://www.instagram.com/reel/xxx');
-                                                break;
-                                        }
-                                        
-                                        const igRaw = query.trim();
-                                        if (!igRaw.includes('instagram.com')) {
-                                                await tolak(hisoka, m, '❌ Link tidak valid! Pastikan link dari Instagram.');
-                                                break;
-                                        }
-                                        
-                                        // Clean URL: strip query params & trailing slash
-                                        let igUrl = igRaw;
-                                        try {
-                                                const parsed = new URL(igRaw);
-                                                igUrl = parsed.origin + parsed.pathname.replace(/\/$/, '') + '/';
-                                        } catch (_) {}
-                                        
-                                        const loadingMsg = await tolak(hisoka, m, '⏳ Sedang mengunduh dari Instagram...');
-
-                                        // Helper: fetch vdraw.ai API
-                                        async function fetchVdraw(url) {
-                                                const res = await fetch('https://vdraw.ai/api/v1/instagram/ins-info', {
-                                                        method: 'POST',
-                                                        headers: { 'Content-Type': 'application/json' },
-                                                        body: JSON.stringify({ url, type: 'video' }),
-                                                        signal: AbortSignal.timeout(15000),
-                                                });
-                                                if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                                                const json = await res.json();
-                                                if (json.code === 100000 && json.data) return json.data;
-                                                throw new Error('No data from vdraw');
-                                        }
-
-                                        // Fetch media (vdraw) + metadata (archive.lick) + meta scrape — paralel
-                                        const [vdrawResult, archiveResult, metaHtmlResult] = await Promise.allSettled([
-                                                fetchVdraw(igUrl),
-                                                fetch(`https://archive.lick.eu.org/api/download/instagram?url=${encodeURIComponent(igUrl)}`, { signal: AbortSignal.timeout(12000) })
-                                                        .then(r => r.json()).catch(() => null),
-                                                fetch(igUrl, {
-                                                        signal: AbortSignal.timeout(10000),
-                                                        headers: {
-                                                                'User-Agent': 'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)',
-                                                                'Accept-Language': 'id-ID,id;q=0.9,en;q=0.8',
-                                                        },
-                                                }).then(r => r.text()).catch(() => ''),
-                                        ]);
-
-                                        let igData = vdrawResult.status === 'fulfilled' ? vdrawResult.value : null;
-                                        const archiveJson = archiveResult.status === 'fulfilled' ? archiveResult.value : null;
-                                        const metaHtml = metaHtmlResult.status === 'fulfilled' ? metaHtmlResult.value : '';
-
-                                        // Jika vdraw gagal, fallback ke archive.lick untuk media URL
-                                        if (!igData && archiveJson?.status && archiveJson?.result) {
-                                                const r = archiveJson.result;
-                                                igData = {
-                                                        media_type: r.isVideo ? 'reel' : 'photo',
-                                                        info: (r.url || []).map(u => ({
-                                                                url: typeof u === 'object' ? (u.url || u.src) : u,
-                                                                media_format: r.isVideo ? 'video' : 'image',
-                                                        })),
-                                                };
-                                        }
-
-                                        if (!igData?.info?.length) {
-                                                await m.reply({ edit: loadingMsg.key, text: '❌ Gagal mengunduh. Pastikan link benar dan akun tidak private, lalu coba lagi.' });
-                                                break;
-                                        }
-
-                                        const mediaItems = igData.info;
-                                        const mediaType = igData.media_type || 'reel';
-
-                                        // Metadata: gabung dari archive.lick + meta scrape
-                                        const archiveMeta = archiveJson?.result || {};
-                                        const parsedMeta  = parseIgMetaHtml(metaHtml);
-
-                                        const fullName = parsedMeta.fullName || '';
-                                        const username = archiveMeta.username || parsedMeta.username || '';
-                                        const caption  = archiveMeta.caption  || parsedMeta.caption  || '';
-                                        const hashtags = parsedMeta.hashtags  || [];
-                                        const likesNum   = archiveMeta.like    || 0;
-                                        const commentsNum = archiveMeta.comment || 0;
-                                        const likesStr   = parsedMeta.likes   || (likesNum ? formatIgCount(likesNum) : '');
-                                        const commentsStr = commentsNum ? formatIgCount(commentsNum) : (parsedMeta.comments || '');
-
-                                        let infoText = `╭═══ *INSTAGRAM DOWNLOADER* ═══╮\n`;
-                                        if (fullName || username) infoText += `│ 👤 ${fullName ? fullName + (username ? ' (@' + username + ')' : '') : '@' + username}\n`;
-                                        if (likesStr) infoText += `│ ❤️ ${likesStr} likes\n`;
-                                        if (commentsStr) infoText += `│ 💬 ${commentsStr} comments\n`;
-                                        if (caption) {
-                                                const shortCaption = caption.length > 200 ? caption.substring(0, 200) + '...' : caption;
-                                                infoText += `│\n│ 📝 ${shortCaption}\n`;
-                                        }
-                                        infoText += `╰════════════════════════╯`;
-
-                                        await m.reply({ edit: loadingMsg.key, text: '✅ Berhasil! Mengirim media...' });
-
-                                        // === STEP 1: Cari thumbnail/cover untuk vision analysis ===
-                                        let igThumbUrl = null;
-
-                                        // Prioritas: cover di level igData → cover di level item → first photo item
-                                        igThumbUrl = igData.cover_url || igData.thumbnail_url || igData.cover || igData.thumb || igData.thumbnail || null;
-
-                                        if (!igThumbUrl && Array.isArray(mediaItems) && mediaItems[0]) {
-                                                const first = mediaItems[0];
-                                                igThumbUrl = first.cover || first.cover_url || first.thumbnail_url || first.thumbnail || null;
-                                        }
-
-                                        if (!igThumbUrl && Array.isArray(mediaItems)) {
-                                                const firstPhoto = mediaItems.find(it => it.media_format === 'image' || it.media_format === 'photo');
-                                                if (firstPhoto) igThumbUrl = firstPhoto.url || firstPhoto.src;
-                                        }
-
-                                        // === STEP 2: Vision — Gemini analisis visual thumbnail ===
-                                        let igVisualDesc = '';
-                                        if (igThumbUrl) {
-                                                try {
-                                                        const { default: axiosLib } = await import('axios');
-                                                        const thumbRes = await axiosLib.get(igThumbUrl, {
-                                                                responseType: 'arraybuffer',
-                                                                timeout: 12000,
-                                                                headers: { 'User-Agent': 'Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile Safari/537.36' },
-                                                        });
-                                                        const thumbBuf = Buffer.from(thumbRes.data);
-                                                        if (thumbBuf.length > 500) {
-                                                                const base64Thumb = thumbBuf.toString('base64');
-                                                                const mimeThumb = thumbRes.headers['content-type']?.split(';')[0] || 'image/jpeg';
-                                                                // Pakai gemini.chat() langsung agar bisa pilih model terbaik
-                                                                igVisualDesc = await gemini.chat({
-                                                                        model: 'gemini-2.5-flash',
-                                                                        contents: [{
-                                                                                role: 'user',
-                                                                                parts: [
-                                                                                        { inlineData: { mimeType: mimeThumb, data: base64Thumb } },
-                                                                                        { text: buildIgVisionPrompt() },
-                                                                                ],
-                                                                        }],
-                                                                });
-                                                        }
-                                                } catch (_) {}
-                                        }
-
-                                        // === STEP 3: Generate caption final via AI ===
-                                        let finalCaptionIG = buildIgFallbackCaption({
-                                                fullName, username,
-                                                likes: likesStr, comments: commentsStr,
-                                                mediaType, caption,
-                                        });
-
-                                        try {
-                                                const captionPrompt = buildIgCaptionPrompt({
-                                                        fullName,
-                                                        username,
-                                                        caption,
-                                                        hashtags,
-                                                        likes: likesStr,
-                                                        comments: commentsStr,
-                                                        mediaType,
-                                                        visualDesc: igVisualDesc,
-                                                });
-                                                const aiCaptionIG = await gemini.ask(captionPrompt);
-                                                if (aiCaptionIG?.trim()) finalCaptionIG = aiCaptionIG.trim();
-                                        } catch (_) {}
-
-                                        let firstVideoUrl = null;
-
-                                        for (let i = 0; i < mediaItems.length; i++) {
-                                                const item = mediaItems[i];
-                                                const mediaUrl = typeof item === 'object' ? (item.url || item.src) : item;
-                                                const isFirstMedia = i === 0;
-
-                                                // Detect video/image dari media_format atau URL ekstensi
-                                                let itemIsVideo = mediaType === 'video' || mediaType === 'reel';
-                                                if (item.media_format) {
-                                                        itemIsVideo = item.media_format === 'video';
-                                                } else {
-                                                        const urlStr = String(mediaUrl).toLowerCase().split('?')[0];
-                                                        if (urlStr.endsWith('.mp4') || urlStr.endsWith('.mov') || urlStr.endsWith('.webm')) itemIsVideo = true;
-                                                        else if (urlStr.endsWith('.jpg') || urlStr.endsWith('.jpeg') || urlStr.endsWith('.png') || urlStr.endsWith('.webp')) itemIsVideo = false;
-                                                }
-
-                                                if (itemIsVideo && !firstVideoUrl) firstVideoUrl = mediaUrl;
-
-                                                try {
-                                                        if (itemIsVideo) {
-                                                                await hisoka.sendMessage(m.from, {
-                                                                        video: { url: mediaUrl },
-                                                                        caption: isFirstMedia ? finalCaptionIG : ''
-                                                                }, { quoted: m });
-                                                        } else {
-                                                                await hisoka.sendMessage(m.from, {
-                                                                        image: { url: mediaUrl },
-                                                                        caption: isFirstMedia ? finalCaptionIG : ''
-                                                                }, { quoted: m });
-                                                        }
-                                                } catch (sendErr) {
-                                                        console.error(`[IG] Failed to send media ${i + 1}:`, sendErr.message);
-                                                }
-                                        }
-
-                                        // Auto kirim audio jika ada video (reel)
-                                        if (firstVideoUrl) {
-                                                try {
-                                                        const execAsync = util.promisify(exec);
-                                                        const tmpAudio = `/tmp/ig_audio_${Date.now()}.mp3`;
-                                                        await execAsync(`ffmpeg -i "${firstVideoUrl}" -vn -acodec libmp3lame -q:a 4 "${tmpAudio}" -y`, { timeout: 60000 });
-                                                        const { readFile, unlink } = await import('fs/promises');
-                                                        const audioBuf = await readFile(tmpAudio);
-                                                        await hisoka.sendMessage(m.from, {
-                                                                audio: audioBuf,
-                                                                mimetype: 'audio/mpeg',
-                                                                ptt: false,
-                                                        }, { quoted: m });
-                                                        unlink(tmpAudio).catch(() => {});
-                                                } catch (audioErr) {
-                                                        console.error('[IG] Gagal ekstrak audio:', audioErr.message);
-                                                }
-                                        }
-
-                                        logCommand(m, hisoka, 'instagram');
+                                        const { handleInstagramDl } = _require(path.resolve('./src/scrape/downloader.cjs'));
+                                        await handleInstagramDl(hisoka, m, query, { gemini, tolak, logCommand, exec, util, buildIgVisionPrompt, buildIgCaptionPrompt, buildIgFallbackCaption, parseIgMetaHtml, formatIgCount });
                                 } catch (error) {
                                         console.error('\x1b[31m[Instagram] Error:\x1b[39m', error.message);
                                         await tolak(hisoka, m, `❌ Error: ${error.message}`);
@@ -10889,119 +13213,8 @@ infoText += `╰═════════════════════�
 
                         case 'fb': {
                                 try {
-                                        if (!query) {
-                                                await tolak(hisoka, m, '❌ Masukkan link Facebook!\n\nContoh:\n.fb https://www.facebook.com/watch?v=xxx\n.fb https://fb.watch/xxx\n.fb https://www.facebook.com/reel/xxx\n.fb https://www.facebook.com/stories/xxx');
-                                                break;
-                                        }
-                                        
-                                        const fbUrl = query.trim();
-                                        if (!fbUrl.includes('facebook.com') && !fbUrl.includes('fb.watch') && !fbUrl.includes('fb.com')) {
-                                                await tolak(hisoka, m, '❌ Link tidak valid! Pastikan link dari Facebook.');
-                                                break;
-                                        }
-                                        
-                                        const loadingMsg = await tolak(hisoka, m, '⏳ Sedang mengunduh dari Facebook...');
-                                        
-                                        const isStory = fbUrl.includes('/stories/') || fbUrl.includes('story.php') || fbUrl.includes('/story/');
-                                        
-                                        let mediaData = null;
-                                        
-                                        // Method 1: archive.lick.eu.org (primary)
-                                        try {
-                                                const apiUrl = `https://archive.lick.eu.org/api/download/facebook?url=${encodeURIComponent(fbUrl)}`;
-                                                const response = await fetch(apiUrl, { signal: AbortSignal.timeout(20000) });
-                                                const data = await response.json();
-                                                
-                                                if (data.status && data.result && data.result.media && data.result.media.length > 0) {
-                                                        const mediaList = data.result.media;
-                                                        const hdMedia = mediaList.find(m => m.quality && (m.quality.toLowerCase().includes('hd') || m.quality.toLowerCase().includes('high')));
-                                                        const bestMedia = hdMedia || mediaList[0];
-                                                        if (bestMedia && bestMedia.url) {
-                                                                mediaData = {
-                                                                        url: bestMedia.url,
-                                                                        quality: hdMedia ? 'HD' : 'SD',
-                                                                        isHD: !!hdMedia,
-                                                                        title: data.result.metadata?.title || '',
-                                                                        isVideo: true
-                                                                };
-                                                        }
-                                                }
-                                        } catch (e) {
-                                                console.log('[FB] archive.lick failed:', e.message);
-                                        }
-                                        
-                                        // Method 2: direct page scraping via axios (Chrome user-agent, allow redirects)
-                                        if (!mediaData) {
-                                                try {
-                                                        const axios = (await import('axios')).default;
-                                                        const { data: pageData } = await axios.get(fbUrl, {
-                                                                maxRedirects: 10,
-                                                                headers: {
-                                                                        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                                                                        'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                                                                        'accept-language': 'en-US,en;q=0.5',
-                                                                        'sec-fetch-dest': 'document',
-                                                                        'sec-fetch-mode': 'navigate',
-                                                                        'sec-fetch-site': 'none',
-                                                                },
-                                                                timeout: 20000
-                                                        });
-                                                        
-                                                        const cleaned = pageData.replace(/&quot;/g, '"').replace(/&amp;/g, '&');
-                                                        
-                                                        const hdMatch = cleaned.match(/"browser_native_hd_url":"([^"]+)"/) || cleaned.match(/"playable_url_quality_hd":"([^"]+)"/);
-                                                        const sdMatch = cleaned.match(/"browser_native_sd_url":"([^"]+)"/) || cleaned.match(/"playable_url":"([^"]+)"/);
-                                                        
-                                                        const hdUrl = hdMatch ? hdMatch[1].replace(/\\/g, '') : null;
-                                                        const sdUrl = sdMatch ? sdMatch[1].replace(/\\/g, '') : null;
-                                                        
-                                                        const videoUrl = hdUrl || sdUrl;
-                                                        if (videoUrl && videoUrl.startsWith('https://')) {
-                                                                mediaData = {
-                                                                        url: videoUrl,
-                                                                        quality: hdUrl ? 'HD' : 'SD',
-                                                                        isHD: !!hdUrl,
-                                                                        isVideo: true
-                                                                };
-                                                                console.log('[FB] direct scraping success:', hdUrl ? 'HD' : 'SD');
-                                                        }
-                                                } catch (e) {
-                                                        console.log('[FB] direct scraping failed:', e.message);
-                                                }
-                                        }
-                                        
-                                        if (!mediaData || !mediaData.url) {
-                                                await m.reply({ edit: loadingMsg.key, text: '❌ Gagal mengunduh. Video/story mungkin private, perlu login, atau link tidak valid.' });
-                                                break;
-                                        }
-                                        
-                                        let infoText = `╭═══ *FACEBOOK DOWNLOADER* ═══╮\n`;
-infoText += `│ 📌 Tipe: ${isStory ? 'Story' : 'Video/Reel'}\n`;
-infoText += `│ 🎬 Kualitas: ${mediaData.quality}\n`;
-if (mediaData.duration) {
-    infoText += `│ ⏱️ Durasi: ${mediaData.duration}\n`;
-}
-if (mediaData.title) {
-    const shortTitle = mediaData.title.length > 50 ? mediaData.title.substring(0, 50) + '...' : mediaData.title;
-    infoText += `│ 📝 ${shortTitle}\n`;
-}
-infoText += `╰════════════════════════╯`;
-                                        
-                                        await m.reply({ edit: loadingMsg.key, text: '✅ Berhasil! Mengirim media...' });
-                                        
-                                        if (mediaData.isVideo !== false) {
-                                                await hisoka.sendMessage(m.from, {
-                                                        video: { url: mediaData.url },
-                                                        caption: infoText
-                                                }, { quoted: m });
-                                        } else {
-                                                await hisoka.sendMessage(m.from, {
-                                                        image: { url: mediaData.url },
-                                                        caption: infoText
-                                                }, { quoted: m });
-                                        }
-                                        
-                                        logCommand(m, hisoka, 'facebook');
+                                        const { handleFacebookDl } = _require(path.resolve('./src/scrape/downloader.cjs'));
+                                        await handleFacebookDl(hisoka, m, query, { tolak, logCommand });
                                 } catch (error) {
                                         console.error('\x1b[31m[Facebook] Error:\x1b[39m', error.message);
                                         await tolak(hisoka, m, `❌ Error: ${error.message}`);
@@ -11383,6 +13596,218 @@ infoText += `╰═════════════════════�
                                 break;
                         }
 
+                        case 'tovn': {
+                                try {
+                                        const audioTypes = ['audioMessage', 'documentMessage'];
+                                        const isAudio = m.isQuoted && audioTypes.includes(quoted.type);
+                                        if (!isAudio) {
+                                                await tolak(hisoka, m, `❌ Reply pesan audio/MP3 untuk dijadikan voice note!\n\nContoh: reply file MP3 lalu ketik *${pfx}tovn*`);
+                                                break;
+                                        }
+
+                                        const quotedMime = quoted?.content?.mimetype || quoted?.msg?.mimetype || '';
+                                        const isAlreadyVN = quotedMime.includes('ogg') && quoted?.msg?.ptt;
+                                        if (isAlreadyVN) {
+                                                await tolak(hisoka, m, '❌ File ini sudah berupa voice note!');
+                                                break;
+                                        }
+
+                                        await hisoka.sendMessage(m.from, { react: { text: '⏳', key: m.key } });
+
+                                        const audioBuffer = await downloadMediaMessage(
+                                                { ...m.quoted, message: m.quoted.raw },
+                                                'buffer',
+                                                {},
+                                                { logger: hisoka.logger, reuploadRequest: hisoka.updateMediaMessage }
+                                        );
+
+                                        if (!audioBuffer || audioBuffer.length === 0) {
+                                                await hisoka.sendMessage(m.from, { react: { text: '❌', key: m.key } });
+                                                await tolak(hisoka, m, '❌ Gagal download audio.');
+                                                break;
+                                        }
+
+                                        const { toVoiceNote } = _require(path.resolve('./src/scrape/audioconvert.cjs'));
+                                        const vnBuffer = await toVoiceNote(audioBuffer, quotedMime || 'audio/mpeg');
+
+                                        await hisoka.sendMessage(m.from, {
+                                                audio: vnBuffer,
+                                                mimetype: 'audio/ogg; codecs=opus',
+                                                ptt: true
+                                        }, { quoted: m });
+
+                                        await hisoka.sendMessage(m.from, { react: { text: '✅', key: m.key } });
+                                } catch (error) {
+                                        console.error('\x1b[31m[ToVN] Error:\x1b[39m', error.message);
+                                        await hisoka.sendMessage(m.from, { react: { text: '❌', key: m.key } });
+                                        await tolak(hisoka, m, `❌ Gagal konversi ke VN: ${error.message}`);
+                                }
+                                break;
+                        }
+
+                        case 'tomp3': {
+                                try {
+                                        const audioTypes = ['audioMessage', 'documentMessage'];
+                                        const isAudio = m.isQuoted && audioTypes.includes(quoted.type);
+                                        if (!isAudio) {
+                                                await tolak(hisoka, m, `❌ Reply voice note atau audio untuk dijadikan MP3!\n\nContoh: reply voice note lalu ketik *${pfx}tomp3*`);
+                                                break;
+                                        }
+
+                                        const quotedMime = quoted?.content?.mimetype || quoted?.msg?.mimetype || '';
+                                        const isMP3 = quotedMime.includes('mpeg') || quotedMime.includes('mp3');
+                                        if (isMP3 && !quoted?.msg?.ptt) {
+                                                await tolak(hisoka, m, '❌ File ini sudah berupa MP3!');
+                                                break;
+                                        }
+
+                                        await hisoka.sendMessage(m.from, { react: { text: '⏳', key: m.key } });
+
+                                        const audioBuffer = await downloadMediaMessage(
+                                                { ...m.quoted, message: m.quoted.raw },
+                                                'buffer',
+                                                {},
+                                                { logger: hisoka.logger, reuploadRequest: hisoka.updateMediaMessage }
+                                        );
+
+                                        if (!audioBuffer || audioBuffer.length === 0) {
+                                                await hisoka.sendMessage(m.from, { react: { text: '❌', key: m.key } });
+                                                await tolak(hisoka, m, '❌ Gagal download audio.');
+                                                break;
+                                        }
+
+                                        const { toMP3 } = _require(path.resolve('./src/scrape/audioconvert.cjs'));
+                                        const mp3Buffer = await toMP3(audioBuffer, quotedMime || 'audio/ogg; codecs=opus');
+
+                                        await hisoka.sendMessage(m.from, {
+                                                audio: mp3Buffer,
+                                                mimetype: 'audio/mpeg',
+                                                ptt: false
+                                        }, { quoted: m });
+
+                                        await hisoka.sendMessage(m.from, { react: { text: '✅', key: m.key } });
+                                } catch (error) {
+                                        console.error('\x1b[31m[ToMP3] Error:\x1b[39m', error.message);
+                                        await hisoka.sendMessage(m.from, { react: { text: '❌', key: m.key } });
+                                        await tolak(hisoka, m, `❌ Gagal konversi ke MP3: ${error.message}`);
+                                }
+                                break;
+                        }
+
+                        case 'infomusik':
+                        case 'infolirik':
+                        case 'musicinfo':
+                        case 'cekmusik': {
+                                try {
+                                        const audioTypes = ['audioMessage', 'documentMessage', 'videoMessage'];
+                                        const isCurrentAudio = m.isMedia && audioTypes.includes(getMediaTypeFromMessage(m));
+                                        const isQuotedAudio  = m.isQuoted && audioTypes.includes(getMediaTypeFromMessage(m.quoted));
+
+                                        if (!isCurrentAudio && !isQuotedAudio) {
+                                                await tolak(hisoka, m,
+                                                        `╭═══〔 🎵 *INFO MUSIK* 〕═══╮\n` +
+                                                        `│\n` +
+                                                        `│ Analisis lengkap audio otomatis:\n` +
+                                                        `│ genre, mood, instrumen & lirik!\n` +
+                                                        `│\n` +
+                                                        `│ *Cara pakai:*\n` +
+                                                        `│ • Kirim audio/video + *${pfx}infomusik*\n` +
+                                                        `│ • Reply audio/video/VN → *${pfx}infomusik*\n` +
+                                                        `│\n` +
+                                                        `│ Mendukung: voice note, MP3,\n` +
+                                                        `│ video MP4, file audio, dll.\n` +
+                                                        `│\n` +
+                                                        `╰══════════════════════════════╯`
+                                                );
+                                                break;
+                                        }
+
+                                        const _isVideo = (msg) => getMediaTypeFromMessage(msg) === 'videoMessage';
+                                        const targetIsVideo = isQuotedAudio ? _isVideo(m.quoted) : _isVideo(m);
+
+                                        await hisoka.sendMessage(m.from, { react: { text: targetIsVideo ? '🎬' : '🎵', key: m.key } });
+                                        const loadingMsg = await tolak(hisoka, m, targetIsVideo ? '🎬 Mengekstrak & menganalisis audio dari video...' : '🎵 Menganalisis audio, harap tunggu...');
+
+                                        const targetMsg  = isQuotedAudio ? m.quoted : m;
+                                        const targetMime = targetMsg?.content?.mimetype || targetMsg?.msg?.mimetype || (targetIsVideo ? 'video/mp4' : 'audio/ogg');
+
+                                        const audioBuffer = await downloadMediaMessage(
+                                                { ...targetMsg, message: targetMsg.raw },
+                                                'buffer',
+                                                {},
+                                                { logger: hisoka.logger, reuploadRequest: hisoka.updateMediaMessage }
+                                        );
+
+                                        if (!audioBuffer || audioBuffer.length === 0) {
+                                                await hisoka.sendMessage(m.from, { react: { text: '❌', key: m.key } });
+                                                await m.reply({ edit: loadingMsg.key, text: '❌ Gagal download audio.' });
+                                                break;
+                                        }
+
+                                        const { analyzeAudio } = _require(path.resolve('./src/scrape/whatgenre.cjs'));
+                                        const result = await analyzeAudio(audioBuffer, targetMime);
+
+                                        await hisoka.sendMessage(m.from, { react: { text: '✅', key: m.key } });
+                                        await m.reply({ edit: loadingMsg.key, text: '✅ Analisis selesai!' });
+
+                                        // Split hasil: blok INFO MUSIK vs blok LIRIK
+                                        const splitMarker = /📜 \*LIRIK/;
+                                        const splitIdx    = result.search(splitMarker);
+                                        const partInfo    = splitIdx > 0 ? result.slice(0, splitIdx).trim() : result;
+                                        const partLirik   = splitIdx > 0 ? result.slice(splitIdx).trim()  : '';
+
+                                        // Bersihkan simbol box-drawing dari teks yang akan di-copy
+                                        const _cleanCopy = (raw) => raw
+                                                .split('\n')
+                                                .filter(l => !/^[\s\u256d\u256e\u2570\u256f\u2550\u2502\u3014\u3015\u2500\u2508\u254c\s]*$/.test(l))
+                                                .filter(l => !/[\u3014\u3015]/.test(l))
+                                                .map(l => l.replace(/^\s*\u2502\s?/, '').trimEnd())
+                                                .join('\n')
+                                                .replace(/\n{3,}/g, '\n\n')
+                                                .trim();
+
+                                        const copyLirik = _cleanCopy(partLirik);
+
+                                        // Ekstrak nilai genre saja (misal: "Pop Jazz, Swing") untuk tombol Salin Genre
+                                        const _genreMatch = partInfo.match(/🎼[^:]+:\s*(.+)/);
+                                        const copyGenre = _genreMatch ? _genreMatch[1].trim() : _cleanCopy(partInfo);
+
+                                        // Kirim hasil reply ke pesan user yang pakai command + dua tombol copy
+                                        // Build replyCtx manual (sama seperti sendCekautoMsg)
+                                        // agar work untuk semua pesan: orang lain, owner, maupun nomor bot sendiri (fromMe)
+                                        const _replyCtx = m.key?.id ? {
+                                                stanzaId: m.key.id,
+                                                participant: m.sender || m.key?.participant || '',
+                                                quotedMessage: m.message || {},
+                                        } : {};
+
+                                        let buttonSent = false;
+                                        try {
+                                                const btn = new Button()
+                                                        .setBody(result)
+                                                        .setFooter((() => { try { return loadConfig()?.botReply?.footer || '🎵 Powered by Gemini AI'; } catch (_) { return '🎵 Powered by Gemini AI'; } })())
+                                                        .setContextInfo(_replyCtx)
+                                                        .addCopy('🎼 Salin Genre', copyGenre, 'copy_infomusik_genre');
+                                                if (copyLirik) {
+                                                        btn.addCopy('📜 Salin Lirik', copyLirik, 'copy_infomusik_lirik');
+                                                }
+                                                await btn.run(m.from, hisoka);
+                                                buttonSent = true;
+                                        } catch (_) {}
+
+                                        if (!buttonSent) {
+                                                await m.reply(result);
+                                        }
+
+                                        logCommand(m, hisoka, 'infomusik');
+                                } catch (error) {
+                                        console.error('\x1b[31m[InfoMusik] Error:\x1b[39m', error.message);
+                                        await hisoka.sendMessage(m.from, { react: { text: '❌', key: m.key } });
+                                        await tolak(hisoka, m, `❌ Gagal analisis audio: ${error.message}`);
+                                }
+                                break;
+                        }
+
                         case 'toimg': {
                                 try {
                                         const sharp = (await import('sharp')).default;
@@ -11458,7 +13883,7 @@ infoText += `╰═════════════════════�
                                 break;
                         }
                                 
-                        case 'jadibot1': {
+                        case 'jadibot': {
                                 if (!isMainBot(hisoka)) return;
                                 if (!m.isOwner) return;
 
@@ -11682,21 +14107,18 @@ infoText += `╰═════════════════════�
                                         }
                                 }
 
-                                const { flag: connFlag, name: connCountry } = getPhoneCountryInfo(number)
-                                await tolak(hisoka, m, 
-                                        `╔══════════════════════╗\n` +
-                                        `║   🤖  *J A D I B O T*  ║\n` +
-                                        `╚══════════════════════╝\n\n` +
-                                        `⏳ Sedang menghubungkan...\n` +
-                                        `${connFlag} *Negara:* ${connCountry}\n` +
-                                        `📱 *Nomor:* +${number}\n` +
-                                        `🕒 *Masa berlaku:* ${durationInfo.label}\n\n` +
-                                        `Kode pairing akan segera dikirim.`
-                                );
+                                try { await hisoka.sendMessage(m.from, { react: { text: '⏳', key: m.key } }) } catch {}
 
                                 await startJadibot(
                                         number,
-                                        async (msg) => tolak(hisoka, m, msg),
+                                        async (msg) => {
+                                                try {
+                                                        const payload = typeof msg === 'string' ? { text: msg } : msg
+                                                        return await hisoka.sendMessage(m.from, payload, { quoted: m })
+                                                } catch (e) {
+                                                        console.error('[JADIBOT][v1-notif] Gagal kirim ke GC:', e?.message)
+                                                }
+                                        },
                                         mainNum,
                                         async (key, text) => {
                                                 try {
@@ -11705,7 +14127,10 @@ infoText += `╰═════════════════════�
                                         },
                                         null,
                                         durationInfo.ms,
-                                        hisoka
+                                        hisoka,
+                                        async (emoji) => {
+                                                try { await hisoka.sendMessage(m.from, { react: { text: emoji, key: m.key } }) } catch {}
+                                        }
                                 );
                         }
                                 break;
@@ -11785,7 +14210,7 @@ infoText += `╰═════════════════════�
                                 const oldCmdLabel = oldCmdInfo?.remaining || 'Tidak ada data';
                                 const oldCmdExpire = oldCmdInfo?.expiresAtText || '-';
                                 if (upDurationInfo.ms === 'permanent') {
-                                        removeJadibotExpiry(upNum)
+                                        setPermanentJadibot(upNum, 'active')
                                         await sendUpBtn(
                                                 `╔══════════════════════╗\n` +
                                                 `║   ⏫  *U P B O T*   ║\n` +
@@ -12016,6 +14441,17 @@ infoText += `╰═════════════════════�
                                         `╰─ _Membuat zip, harap tunggu..._`
                                 );
 
+                                // Generate .env dari process.env (hanya variabel relevan bot)
+                                const BOT_ENV_PREFIXES = ['BOT_', 'WILY_', 'GEMINI_', 'REACT_'];
+                                const BOT_ENV_EXACT    = new Set(['NODE_ENV']);
+                                const envEntries = Object.entries(process.env)
+                                        .filter(([k]) => BOT_ENV_PREFIXES.some(p => k.startsWith(p)) || BOT_ENV_EXACT.has(k))
+                                        .sort(([a], [b]) => a.localeCompare(b));
+                                const envContent = envEntries.length
+                                        ? envEntries.map(([k, v]) => `${k}=${v}`).join('\n') + '\n'
+                                        : '# Tidak ada variabel lingkungan bot yang ditemukan\n';
+                                const envBuffer = Buffer.from(envContent, 'utf8');
+
                                 // Buat zip ke /tmp
                                 const rawZipName = query
                                         ? query.trim().replace(/[\\/:*?"<>|]/g, '').replace(/\s+/g, '_').slice(0, 80)
@@ -12048,6 +14484,10 @@ infoText += `╰═════════════════════�
                                                 const fullPath = path.join(rootDir, item);
                                                 addToArchive(archive, fullPath, item);
                                         }
+
+                                        // Tambahkan .env virtual dari process.env
+                                        archive.append(envBuffer, { name: '.env' });
+
                                         archive.finalize();
                                 });
 
@@ -12055,6 +14495,9 @@ infoText += `╰═════════════════════�
                                 const zipSizeMB = (zipBuffer.length / 1024 / 1024).toFixed(2);
 
                                 // Caption ringkas untuk dokumen zip
+                                const envInfoLine = envEntries.length
+                                        ? `🔑 *.env* → ${envEntries.length} variabel (${envEntries.map(([k]) => k).join(', ')})`
+                                        : `🔑 *.env* → tidak ada variabel bot`;
                                 const zipCaption =
                                         `╭─「 📦 *BACKUP SELESAI* 」\n` +
                                         `│\n` +
@@ -12068,6 +14511,8 @@ infoText += `╰═════════════════════�
                                                 const detail = [files ? `${files} file` : '', folders ? `${folders} folder` : ''].filter(Boolean).join(', ') || 'kosong';
                                                 return `│  └─ ${f}/ → ${detail}`;
                                         }).join('\n') + '\n' +
+                                        `│\n` +
+                                        `├─ ${envInfoLine}\n` +
                                         `│\n` +
                                         `├─ 🚫 *Exclude :* ${excludedItems.join(', ')}, bin/yt-dlp\n` +
                                         `│\n` +
@@ -12351,88 +14796,8 @@ infoText += `╰═════════════════════�
 
                         case 'play': {
                                 try {
-                                        if (!query) {
-                                                await tolak(hisoka, m, '❌ Masukkan judul lagu!\n\nContoh: .play shape of you ed sheeran');
-                                                break;
-                                        }
-
-                                        await hisoka.sendMessage(m.from, { react: { text: '🔍', key: m.key } });
-                                        const loadingMsg = await tolak(hisoka, m, '🔍 Mencari lagu...');
-
-                                        const yts = (await import('yt-search')).default;
-                                        const searchResult = await yts(query.trim());
-
-                                        if (!searchResult || !searchResult.videos || searchResult.videos.length === 0) {
-                                                await hisoka.sendMessage(m.from, { react: { text: '❌', key: m.key } });
-                                                await m.reply({ edit: loadingMsg.key, text: '❌ Lagu tidak ditemukan!' });
-                                                break;
-                                        }
-
-                                        const video = searchResult.videos[0];
-
-                                        if (video.seconds > 600) {
-                                                await hisoka.sendMessage(m.from, { react: { text: '❌', key: m.key } });
-                                                await m.reply({ edit: loadingMsg.key, text: `❌ Durasi terlalu panjang! (${video.duration.timestamp})\nMaksimal 10 menit.` });
-                                                break;
-                                        }
-
-                                        const thumbUrl = video.thumbnail || `https://i.ytimg.com/vi/${video.videoId}/hqdefault.jpg`;
-                                        const videoLink = video.url || `https://youtu.be/${video.videoId}`;
-                                        const durStr = video.duration.timestamp;
-                                        const viewsFmt = video.views ? video.views.toLocaleString('id-ID') : '?';
-
-                                        let playBody = `╭═══〔 *🎵 PLAY MUSIC* 〕═══╮\n`;
-                                        playBody += `│\n`;
-                                        playBody += `│ 📌 *${video.title}*\n`;
-                                        playBody += `│ ⏱️ Durasi  : ${durStr}\n`;
-                                        playBody += `│ 👁️ Views   : ${viewsFmt}\n`;
-                                        if (video.author?.name) playBody += `│ 👤 Channel : ${video.author.name}\n`;
-                                        playBody += `│ 🔗 Link    : ${videoLink}\n`;
-                                        playBody += `│\n`;
-                                        playBody += `│ Pilih format di bawah 👇\n`;
-                                        playBody += `╰═══════════════════════╯`;
-
-                                        let buttonSent = false;
-                                        try {
-                                                await new Button()
-                                                        .setImage(thumbUrl)
-                                                        .setBody(playBody)
-                                                        .setFooter('⏳ Pilihan hangus dalam 2 menit')
-                                                        .addReply('🎵 Audio MP3', '1')
-                                                        .addReply('🎬 Video MP4 (360p)', '2')
-                                                        .run(m.from, hisoka, m);
-                                                buttonSent = true;
-                                        } catch {
-                                                await hisoka.sendMessage(m.from, {
-                                                        image: { url: thumbUrl },
-                                                        caption: playBody + `\n\n🎵 *1* - Audio MP3\n🎬 *2* - Video MP4\n\n_Balas dengan angka pilihanmu_`
-                                                }, { quoted: m });
-                                        }
-
-                                        await hisoka.sendMessage(m.from, { react: { text: '🎵', key: m.key } });
-                                        await m.reply({
-                                                edit: loadingMsg.key,
-                                                text: buttonSent
-                                                        ? `🎵 Ketemu! Tap tombol *Audio MP3* atau *Video MP4* untuk download.`
-                                                        : `🎵 Ketemu! Balas dengan *1* untuk Audio MP3 atau *2* untuk Video MP4.`
-                                        });
-
-                                        // Simpan pilihan pending dengan timeout 2 menit
-                                        const timeoutId = setTimeout(() => {
-                                                if (pendingPlayChoices.has(m.sender)) {
-                                                        pendingPlayChoices.delete(m.sender);
-                                                }
-                                        }, 2 * 60 * 1000);
-
-                                        pendingPlayChoices.set(m.sender, {
-                                                url: video.url,
-                                                title: video.title,
-                                                duration: durStr,
-                                                seconds: video.seconds,
-                                                timeout: timeoutId
-                                        });
-
-                                        logCommand(m, hisoka, 'play');
+                                        const { handlePlay } = _require(path.resolve('./src/scrape/downloader.cjs'));
+                                        await handlePlay(hisoka, m, query, { tolak, logCommand, pendingPlayChoices, Button });
                                 } catch (error) {
                                         console.error('\x1b[31m[Play] Error:\x1b[39m', error.message);
                                         await hisoka.sendMessage(m.from, { react: { text: '❌', key: m.key } });
@@ -12450,123 +14815,13 @@ infoText += `╰═════════════════════�
 
                         case 'ytmp3': {
                                 try {
-                                        if (!query) {
-                                                await tolak(hisoka, m, '❌ Masukkan link YouTube!\n\nContoh: .ytmp3 https://youtu.be/xxx\nAtau: .ytmp3 https://www.youtube.com/watch?v=xxx');
-                                                break;
-                                        }
-
-                                        const ytUrl = query.trim();
-                                        if (!ytUrl.includes('youtube.com') && !ytUrl.includes('youtu.be')) {
-                                                await tolak(hisoka, m, '❌ Link tidak valid! Gunakan link YouTube.');
-                                                break;
-                                        }
-
-                                        await hisoka.sendMessage(m.from, { react: { text: '⏳', key: m.key } });
-                                        const loadingMsg = await tolak(hisoka, m, '⏳ Mengambil info video...');
-
-                                        const ytdlpBin = await ensureYtdlp(hisoka, m);
-
-                                        const metaRaw = await new Promise((resolve, reject) => {
-                                                exec(`"${ytdlpBin}" --js-runtimes node --no-playlist --dump-json "${ytUrl}"`, { timeout: 30000 }, (err, stdout, stderr) => {
-                                                        if (err) return reject(new Error(parseYtdlpError(stderr, err.message)));
-                                                        resolve(stdout.trim());
-                                                });
-                                        });
-
-                                        const meta = JSON.parse(metaRaw);
-                                        const duration = meta.duration || 0;
-
-                                        if (duration > 600) {
-                                                await hisoka.sendMessage(m.from, { react: { text: '❌', key: m.key } });
-                                                await m.reply({ edit: loadingMsg.key, text: `❌ Durasi terlalu panjang! (${Math.floor(duration / 60)} menit)\nMaksimal 10 menit.` });
-                                                break;
-                                        }
-
-                                        await m.reply({ edit: loadingMsg.key, text: '⏳ Mengunduh audio MP3...' });
-
-                                        const durMin = Math.floor(duration / 60);
-                                        const durSec = Math.floor(duration % 60);
-                                        const durStr = `${durMin}:${String(durSec).padStart(2, '0')}`;
-                                        const viewsFmt = meta.view_count ? parseInt(meta.view_count).toLocaleString('id-ID') : '?';
-                                        const thumbUrl = meta.thumbnail || `https://i.ytimg.com/vi/${meta.id}/hqdefault.jpg`;
-                                        const videoLink = `https://youtu.be/${meta.id}`;
-
-                                        let mp3Caption = `╭═══〔 *🎵 YTMP3 DOWNLOADER* 〕═══╮\n`;
-                                        mp3Caption += `│\n`;
-                                        mp3Caption += `│ 📌 *${meta.title}*\n`;
-                                        mp3Caption += `│ ⏱️ Durasi  : ${durStr}\n`;
-                                        mp3Caption += `│ 👁️ Views   : ${viewsFmt}\n`;
-                                        if (meta.uploader) mp3Caption += `│ 👤 Channel : ${meta.uploader}\n`;
-                                        if (meta.like_count) mp3Caption += `│ 👍 Likes   : ${parseInt(meta.like_count).toLocaleString('id-ID')}\n`;
-                                        mp3Caption += `│ 🔗 Link    : ${videoLink}\n`;
-                                        mp3Caption += `│\n`;
-                                        mp3Caption += `│ ⬇️ _Sedang mengunduh audio MP3..._\n`;
-                                        mp3Caption += `╰══════════════════════════════╯`;
-
-                                        // Generate AI caption secara paralel saat download berjalan
-                                        const aiCaptionPromiseYtmp3 = gemini.ask(buildVideoDownloadCaptionPrompt({
-                                            platform: 'YouTube Audio',
-                                            title: meta.title || '',
-                                            author: meta.uploader || meta.channel || '',
-                                            duration: durStr,
-                                            views: viewsFmt,
-                                            likes: meta.like_count ? parseInt(meta.like_count).toLocaleString('id-ID') : '',
-                                            description: meta.description || '',
-                                        })).catch(() => null);
-
-                                        await hisoka.sendMessage(m.from, {
-                                                image: { url: thumbUrl },
-                                                caption: mp3Caption
-                                        }, { quoted: m });
-
-                                        // Cek disk space sebelum download
-                                        const { getDiskUsage, clearTmpFolder: clearTmpForYtmp3 } = await import('../helper/cleaner.js');
-                                        const diskInfoYtmp3 = getDiskUsage();
-                                        if (diskInfoYtmp3.free < 80 * 1024 * 1024) {
-                                                console.log(`\x1b[33m[YTMP3]\x1b[39m Disk hampir penuh (${diskInfoYtmp3.free} bytes), membersihkan tmp...`);
-                                                clearTmpForYtmp3();
-                                        }
-
-                                        const tmpId = Date.now();
-                                        const tmpFile = path.join(process.cwd(), 'tmp', `ytmp3_${tmpId}.mp3`);
-                                        const tmpTemplate = path.join(process.cwd(), 'tmp', `ytmp3_${tmpId}.%(ext)s`);
-
-                                        await new Promise((resolve, reject) => {
-                                                const cmd = `"${ytdlpBin}" --js-runtimes node --no-playlist -x --audio-format mp3 --audio-quality 5 -o "${tmpTemplate}" "${ytUrl}"`;
-                                                exec(cmd, { timeout: 120000 }, (err, stdout, stderr) => {
-                                                        if (err) return reject(new Error(parseYtdlpError(stderr, err.message)));
-                                                        resolve();
-                                                });
-                                        });
-
-                                        const audioBuffer = fs.readFileSync(tmpFile);
-
-                                        // Tunggu AI caption selesai
-                                        const aiCaptionYtmp3 = await aiCaptionPromiseYtmp3;
-                                        const finalCaptionYtmp3 = aiCaptionYtmp3?.trim() || `🎵 *${meta.title}*\n👤 ${meta.uploader || ''}\n⏱️ ${durStr}`;
-
-                                        await hisoka.sendMessage(m.from, {
-                                                audio: audioBuffer,
-                                                mimetype: 'audio/mpeg',
-                                                fileName: `${meta.title.replace(/[^\w\s]/gi, '')}.mp3`,
-                                                ptt: false
-                                        }, { quoted: m });
-
-                                        await hisoka.sendMessage(m.from, { react: { text: '✅', key: m.key } });
-                                        await m.reply({ edit: loadingMsg.key, text: `✅ *Audio MP3 berhasil dikirim!*\n\n${finalCaptionYtmp3}` });
-
-                                        try { fs.unlinkSync(tmpFile); } catch (_) {}
-
-                                        logCommand(m, hisoka, 'ytmp3');
+                                        const { handleYtmp3 } = _require(path.resolve('./src/scrape/downloader.cjs'));
+                                        await handleYtmp3(hisoka, m, query, { gemini, tolak, logCommand, buildVideoDownloadCaptionPrompt });
                                 } catch (error) {
                                         console.error('\x1b[31m[YTMP3] Error:\x1b[39m', error.message);
-                                        // Cleanup tmp file jika ada error
                                         try {
-                                                const tmpId2 = Date.now();
                                                 const possibleFiles = fs.readdirSync(path.join(process.cwd(), 'tmp')).filter(f => f.startsWith('ytmp3_'));
-                                                for (const f of possibleFiles) {
-                                                        try { fs.unlinkSync(path.join(process.cwd(), 'tmp', f)); } catch (_) {}
-                                                }
+                                                for (const f of possibleFiles) { try { fs.unlinkSync(path.join(process.cwd(), 'tmp', f)); } catch (_) {} }
                                         } catch (_) {}
                                         await hisoka.sendMessage(m.from, { react: { text: '❌', key: m.key } });
                                         const errMsg = error.message || '';
@@ -12583,122 +14838,13 @@ infoText += `╰═════════════════════�
 
                         case 'ytmp4': {
                                 try {
-                                        if (!query) {
-                                                await tolak(hisoka, m, '❌ Masukkan link YouTube!\n\nContoh: .ytmp4 https://youtu.be/xxx\nAtau: .ytmp4 https://www.youtube.com/watch?v=xxx');
-                                                break;
-                                        }
-
-                                        const ytUrl = query.trim();
-                                        if (!ytUrl.includes('youtube.com') && !ytUrl.includes('youtu.be')) {
-                                                await tolak(hisoka, m, '❌ Link tidak valid! Gunakan link YouTube.');
-                                                break;
-                                        }
-
-                                        await hisoka.sendMessage(m.from, { react: { text: '⏳', key: m.key } });
-                                        const loadingMsg = await tolak(hisoka, m, '⏳ Mengambil info video...');
-
-                                        const ytdlpBin = await ensureYtdlp(hisoka, m);
-
-                                        const metaRaw = await new Promise((resolve, reject) => {
-                                                exec(`"${ytdlpBin}" --js-runtimes node --no-playlist --dump-json "${ytUrl}"`, { timeout: 30000 }, (err, stdout, stderr) => {
-                                                        if (err) return reject(new Error(parseYtdlpError(stderr, err.message)));
-                                                        resolve(stdout.trim());
-                                                });
-                                        });
-
-                                        const meta = JSON.parse(metaRaw);
-                                        const duration = meta.duration || 0;
-
-                                        if (duration > 300) {
-                                                await hisoka.sendMessage(m.from, { react: { text: '❌', key: m.key } });
-                                                await m.reply({ edit: loadingMsg.key, text: `❌ Durasi terlalu panjang! (${Math.floor(duration / 60)} menit)\nMaksimal 5 menit untuk video.` });
-                                                break;
-                                        }
-
-                                        await m.reply({ edit: loadingMsg.key, text: '⏳ Mengunduh video MP4...' });
-
-                                        const durMin = Math.floor(duration / 60);
-                                        const durSec = Math.floor(duration % 60);
-                                        const durStr = `${durMin}:${String(durSec).padStart(2, '0')}`;
-                                        const viewsFmt = meta.view_count ? parseInt(meta.view_count).toLocaleString('id-ID') : '?';
-                                        const thumbUrl = meta.thumbnail || `https://i.ytimg.com/vi/${meta.id}/hqdefault.jpg`;
-                                        const videoLink = `https://youtu.be/${meta.id}`;
-
-                                        let mp4Caption = `╭═══〔 *🎬 YTMP4 DOWNLOADER* 〕═══╮\n`;
-                                        mp4Caption += `│\n`;
-                                        mp4Caption += `│ 📌 *${meta.title}*\n`;
-                                        mp4Caption += `│ ⏱️ Durasi  : ${durStr}\n`;
-                                        mp4Caption += `│ 📐 Kualitas: 360p\n`;
-                                        mp4Caption += `│ 👁️ Views   : ${viewsFmt}\n`;
-                                        if (meta.uploader) mp4Caption += `│ 👤 Channel : ${meta.uploader}\n`;
-                                        if (meta.like_count) mp4Caption += `│ 👍 Likes   : ${parseInt(meta.like_count).toLocaleString('id-ID')}\n`;
-                                        mp4Caption += `│ 🔗 Link    : ${videoLink}\n`;
-                                        mp4Caption += `│\n`;
-                                        mp4Caption += `│ ⬇️ _Sedang mengunduh video MP4..._\n`;
-                                        mp4Caption += `╰══════════════════════════════╯`;
-
-                                        // Generate AI caption paralel saat download berjalan
-                                        const aiCaptionPromiseYtmp4 = gemini.ask(buildVideoDownloadCaptionPrompt({
-                                            platform: 'YouTube',
-                                            title: meta.title || '',
-                                            author: meta.uploader || meta.channel || '',
-                                            duration: durStr,
-                                            views: viewsFmt,
-                                            likes: meta.like_count ? parseInt(meta.like_count).toLocaleString('id-ID') : '',
-                                            description: meta.description || '',
-                                        })).catch(() => null);
-
-                                        await hisoka.sendMessage(m.from, {
-                                                image: { url: thumbUrl },
-                                                caption: mp4Caption
-                                        }, { quoted: m });
-
-                                        // Cek disk space sebelum download
-                                        const { getDiskUsage: getDiskYtmp4, clearTmpFolder: clearTmpForYtmp4 } = await import('../helper/cleaner.js');
-                                        const diskInfoYtmp4 = getDiskYtmp4();
-                                        if (diskInfoYtmp4.free < 200 * 1024 * 1024) {
-                                                console.log(`\x1b[33m[YTMP4]\x1b[39m Disk hampir penuh (${diskInfoYtmp4.free} bytes), membersihkan tmp...`);
-                                                clearTmpForYtmp4();
-                                        }
-
-                                        const tmpId = Date.now();
-                                        const tmpFile = path.join(process.cwd(), 'tmp', `ytmp4_${tmpId}.mp4`);
-                                        const tmpTemplate = path.join(process.cwd(), 'tmp', `ytmp4_${tmpId}.%(ext)s`);
-
-                                        await new Promise((resolve, reject) => {
-                                                const cmd = `"${ytdlpBin}" --js-runtimes node --no-playlist -f "bestvideo[height<=360]+bestaudio/best[height<=360]" --merge-output-format mp4 --postprocessor-args "ffmpeg:-c:v libx264 -c:a aac -movflags +faststart -preset fast -crf 28" -o "${tmpTemplate}" "${ytUrl}"`;
-                                                exec(cmd, { timeout: 240000 }, (err, stdout, stderr) => {
-                                                        if (err) return reject(new Error(parseYtdlpError(stderr, err.message)));
-                                                        resolve();
-                                                });
-                                        });
-
-                                        const videoBuffer = fs.readFileSync(tmpFile);
-
-                                        // Tunggu AI caption selesai
-                                        const aiCaptionYtmp4 = await aiCaptionPromiseYtmp4;
-                                        const finalCaptionYtmp4 = aiCaptionYtmp4?.trim() || `🎬 *${meta.title}*\n👤 ${meta.uploader || ''}\n⏱️ ${durStr} • 360p`;
-
-                                        await hisoka.sendMessage(m.from, {
-                                                video: videoBuffer,
-                                                caption: finalCaptionYtmp4,
-                                                mimetype: 'video/mp4'
-                                        }, { quoted: m });
-
-                                        await hisoka.sendMessage(m.from, { react: { text: '✅', key: m.key } });
-                                        await m.reply({ edit: loadingMsg.key, text: `✅ *Video MP4 berhasil dikirim!*\n📌 ${meta.title}` });
-
-                                        try { fs.unlinkSync(tmpFile); } catch (_) {}
-
-                                        logCommand(m, hisoka, 'ytmp4');
+                                        const { handleYtmp4 } = _require(path.resolve('./src/scrape/downloader.cjs'));
+                                        await handleYtmp4(hisoka, m, query, { gemini, tolak, logCommand, buildVideoDownloadCaptionPrompt });
                                 } catch (error) {
                                         console.error('\x1b[31m[YTMP4] Error:\x1b[39m', error.message);
-                                        // Cleanup tmp file jika ada error
                                         try {
                                                 const possibleFiles = fs.readdirSync(path.join(process.cwd(), 'tmp')).filter(f => f.startsWith('ytmp4_'));
-                                                for (const f of possibleFiles) {
-                                                        try { fs.unlinkSync(path.join(process.cwd(), 'tmp', f)); } catch (_) {}
-                                                }
+                                                for (const f of possibleFiles) { try { fs.unlinkSync(path.join(process.cwd(), 'tmp', f)); } catch (_) {} }
                                         } catch (_) {}
                                         await hisoka.sendMessage(m.from, { react: { text: '❌', key: m.key } });
                                         const errMsg = error.message || '';
@@ -12712,7 +14858,6 @@ infoText += `╰═════════════════════�
                                 }
                                 break;
                         }
-
                         case 'antitagsw': {
                                 if (!m.isGroup) return tolak(hisoka, m, '❌ Fitur ini hanya bisa digunakan di grup!');
                                 if (!m.isAdmin && !m.isOwner) return tolak(hisoka, m, '❌ Hanya admin grup atau owner bot yang bisa menggunakan perintah ini!');
@@ -12769,7 +14914,8 @@ infoText += `╰═════════════════════�
                                         }
 
                                         toggleAntiTagSW(m.from, true);
-                                        await tolak(hisoka, m, 
+                                        saveCekautoTimestamp('antiTagSWGrup', m.from);
+                                        await sendConfirmWithButtons(hisoka, m,
                                                 `╭───〔 *✅ ANTI-TAG SEMUA WARGA* 〕───╮\n` +
                                                 `│\n` +
                                                 `│ 🟢 *Fitur AntiTagSW AKTIF!*\n` +
@@ -12781,7 +14927,8 @@ infoText += `╰═════════════════════�
                                                 `│ ℹ️ Anggota yang mentag grup lewat\n` +
                                                 `│    STATUS akan diperingatkan & dikick!\n` +
                                                 `│\n` +
-                                                `╰────────────────────────────────────╯`
+                                                `╰────────────────────────────────────╯`,
+                                                [{ text: '➕ Aktifkan Semua Grup', id: '__addallgrp__antiTagSWGrup' }]
                                         );
                                         logCommand(m, hisoka, 'antitagsw on');
                                 } else if (arg === 'off') {
@@ -12890,7 +15037,8 @@ infoText += `╰═════════════════════�
                                                 globalAutoEnabled = true;
                                         }
                                         toggleAntiPorn(m.from, true);
-                                        await tolak(hisoka, m,
+                                        saveCekautoTimestamp('antipornGrup', m.from);
+                                        await sendConfirmWithButtons(hisoka, m,
                                                 `╭───〔 *✅ ANTI-PORN SYSTEM* 〕───╮\n` +
                                                 `│\n` +
                                                 `│ 🟢 *Fitur AntiPorn AKTIF!*\n` +
@@ -12905,7 +15053,8 @@ infoText += `╰═════════════════════�
                                                 `│ ℹ️ Gambar/stiker/video 18+ akan\n` +
                                                 `│    dihapus & pelanggar diperingatkan!\n` +
                                                 `│\n` +
-                                                `╰────────────────────────────────────╯`
+                                                `╰────────────────────────────────────╯`,
+                                                [{ text: '➕ Aktifkan Semua Grup', id: '__addallgrp__antipornGrup' }]
                                         );
                                         logCommand(m, hisoka, `antiporn ${argAp}`);
                                 } else if (argAp === 'off') {
@@ -13061,7 +15210,8 @@ infoText += `╰═════════════════════�
                                 if (arg === 'on') {
                                         cfg.welcomeGoodbye.groups[m.from][featureKey] = true;
                                         fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 4));
-                                        await tolak(hisoka, m,
+                                        saveCekautoTimestamp(featureKey, m.from);
+                                        await sendConfirmWithButtons(hisoka, m,
                                                 `╭───〔 *✅ ${featureName.toUpperCase()} CARD* 〕───╮\n` +
                                                 `│\n` +
                                                 `│ 🟢 *Fitur ${featureName} Card AKTIF!*\n` +
@@ -13071,7 +15221,8 @@ infoText += `╰═════════════════════�
                                                 `│\n` +
                                                 `│ 💡 Nonaktifkan: *.${featureKey} off*\n` +
                                                 `│\n` +
-                                                `╰────────────────────────────────────╯`
+                                                `╰────────────────────────────────────╯`,
+                                                [{ text: '➕ Aktifkan Semua Grup', id: `__addallgrp__${featureKey}` }]
                                         );
                                         logCommand(m, hisoka, `set${featureKey} on`);
                                 } else if (arg === 'off') {
@@ -13118,7 +15269,8 @@ infoText += `╰═════════════════════�
                         case 'swgroup':
                         case 'statusgrup':
                         case 'statusgroup': {
-                                if (!m.isOwner) return tolak(hisoka, m, '❌ Fitur ini hanya untuk owner!');
+                                const isJadibotUser = hisoka?.isMainBot === false;
+                                if (!m.isOwner && !isJadibotUser) return tolak(hisoka, m, '❌ Fitur ini hanya untuk owner!');
 
                                 const swgcCaption = query ? query.trim() : '';
                                 let swgcMeta = {};
@@ -13574,24 +15726,26 @@ infoText += `╰═════════════════════�
                         case 'hdvideo': {
                                 try {
                                         const { hdvideo } = _require(path.resolve('./src/scrape/hdvid.cjs'));
-                                        const { hdr } = _require(path.resolve('./src/scrape/iloveimg.cjs'));
+                                        const { sparkpixHdUpscale } = _require(path.resolve('./src/scrape/sparkpix.cjs'));
 
                                         const isMediaMsg = m.isMedia && (m.type === 'imageMessage' || m.type === 'videoMessage' || m.type === 'stickerMessage');
                                         const isQuotedMedia = m.isQuoted && quoted.isMedia && (quoted.type === 'imageMessage' || quoted.type === 'videoMessage' || quoted.type === 'stickerMessage');
 
                                         if (!isMediaMsg && !isQuotedMedia) {
                                                 await tolak(hisoka, m,
-                                                        `╭═══『 🖼️ *HD Enhancer* 』═══╮\n│\n` +
+                                                        `╭═══『 🖼️ *HD Upscaler* 』═══╮\n│\n` +
                                                         `│ Tingkatkan kualitas gambar/video\n` +
                                                         `│ menjadi lebih tajam & jernih!\n│\n` +
                                                         `│ *Cara Pakai:*\n` +
-                                                        `│ • Kirim gambar/video dengan caption\n` +
-                                                        `│   *.hd* / *.remini* / *.hdvideo*\n` +
-                                                        `│ • Atau reply ke gambar/video\n│\n` +
-                                                        `│ *Perintah:*\n` +
-                                                        `│ *.hd* / *.remini* / *.hdr* → Gambar\n` +
-                                                        `│ *.hdvid* / *.vidhd* / *.hdvideo* → Video\n` +
-                                                        `│\n╰═════════════════════╯`
+                                                        `│ • Kirim gambar dengan caption:\n` +
+                                                        `│   *.hd* [resolusi]\n│\n` +
+                                                        `│ *Pilihan Resolusi:*\n` +
+                                                        `│ *.hd 4k* → 4K (default)\n` +
+                                                        `│ *.hd 6k* → 6K\n` +
+                                                        `│ *.hd 8k* → 8K (terbaik)\n│\n` +
+                                                        `│ *Video:*\n` +
+                                                        `│ *.hdvid* / *.vidhd* / *.hdvideo*\n` +
+                                                        `│\n╰══════════════════════════╯`
                                                 );
                                                 break;
                                         }
@@ -13666,11 +15820,30 @@ infoText += `╰═════════════════════�
 
                                                 await hisoka.sendMessage(m.from, { react: { text: '✅', key: m.key } });
                                         } else {
-                                                const resultBuffer = await hdr(mediaBuffer, 4);
+                                                const resInput = (query || '4k').trim().toLowerCase().split(/\s+/)[0];
+                                                const { resolution } = (() => {
+                                                        const v = resInput;
+                                                        if (['6k','3','3x'].includes(v)) return { resolution: '6K' };
+                                                        if (['8k','4','4x'].includes(v)) return { resolution: '8K' };
+                                                        return { resolution: '4K' };
+                                                })();
+
+                                                await hisoka.sendMessage(m.from, { react: { text: '⏳', key: m.key } });
+                                                await tolak(hisoka, m, `⏳ Sedang upscale gambar ke *${resolution}* via SparkPix...\nMohon tunggu sebentar.`);
+
+                                                const result = await sparkpixHdUpscale(mediaBuffer, { resolution: resInput });
+
+                                                if (!result.status || !result.result_url) {
+                                                        throw new Error(result.message || 'API SparkPix gagal merespons');
+                                                }
+
+                                                const imgFetch = await fetch(result.result_url);
+                                                if (!imgFetch.ok) throw new Error('Gagal download hasil upscale');
+                                                const imgBuffer = Buffer.from(await imgFetch.arrayBuffer());
 
                                                 await hisoka.sendMessage(m.from, {
-                                                        image: Buffer.from(resultBuffer),
-                                                        caption: '✅ Gambar berhasil diproses ke kualitas HD!'
+                                                        image  : imgBuffer,
+                                                        caption: `✅ *Gambar berhasil diupscale ke ${resolution}!*\n🔗 Powered by SparkPix AI`
                                                 }, { quoted: m });
 
                                                 await hisoka.sendMessage(m.from, { react: { text: '✅', key: m.key } });
@@ -13803,6 +15976,153 @@ infoText += `╰═════════════════════�
                                 break;
                         }
 
+                        case 'autosholat': {
+                                if (!m.isOwner) return tolak(hisoka, m, '❌ Hanya owner yang bisa gunakan perintah ini.');
+
+                                const _as  = _require(path.resolve('./src/scrape/autosholat.cjs'));
+                                const sub  = (query || '').trim().toLowerCase();
+                                const pfx  = m.prefix || '.';
+                                const jidGrup = m.from;
+
+                                // ── HELP / tanpa sub-perintah ─────────────────────────────────────
+                                if (!sub || sub === 'help') {
+                                        const aktif = _as.isGroupEnabled(jidGrup);
+                                        const grupLabel = m.isGroup
+                                                ? (aktif ? '✅ *Aktif* di grup ini' : '❌ *Belum terdaftar* di grup ini')
+                                                : '_Perintah add/remove hanya bisa di grup_';
+                                        await tolak(hisoka, m,
+                                                `╭─「 🕌 *AUTO SHOLAT* 」\n` +
+                                                `│\n` +
+                                                `│ Status: ${grupLabel}\n` +
+                                                `│\n` +
+                                                `│ *Perintah:*\n` +
+                                                `│ • *${pfx}autosholat add* — daftarkan grup ini\n` +
+                                                `│ • *${pfx}autosholat remove* — hapus grup ini\n` +
+                                                `│ • *${pfx}autosholat test* — tes kirim sekarang\n` +
+                                                `│ • *${pfx}autosholat status* — lihat semua grup\n` +
+                                                `│ • *${pfx}autosholat jadwal* — lihat jadwal hari ini\n` +
+                                                `│\n` +
+                                                `│ 💡 Bot kirim gambar masjid + suara adzan\n` +
+                                                `│    ke grup tepat saat waktu sholat tiba.\n` +
+                                                `╰──────────────────────`
+                                        );
+                                        break;
+                                }
+
+                                // ── ADD ───────────────────────────────────────────────────────────
+                                if (sub === 'add') {
+                                        if (!m.isGroup) return tolak(hisoka, m, '❌ Perintah ini hanya bisa digunakan di dalam grup!');
+                                        const berhasil = _as.addGroup(jidGrup);
+                                        await tolak(hisoka, m,
+                                                berhasil
+                                                        ? `╭─「 🕌 *AUTO SHOLAT* 」\n│\n│ ✅ Grup berhasil didaftarkan!\n│\n│ Bot akan otomatis kirim notifikasi\n│ + gambar masjid + suara adzan ke\n│ grup ini setiap waktu sholat tiba.\n│\n│ Ketik *${pfx}autosholat remove* untuk berhenti.\n╰──────────────────────`
+                                                        : `╭─「 🕌 *AUTO SHOLAT* 」\n│\n│ ℹ️ Grup ini sudah terdaftar sebelumnya.\n│ Tidak ada perubahan.\n╰──────────────────────`
+                                        );
+                                        if (berhasil) await hisoka.sendMessage(m.from, { react: { text: '✅', key: m.key } });
+                                        logCommand(m, hisoka, 'autosholat-add');
+                                        break;
+                                }
+
+                                // ── REMOVE / DEL ──────────────────────────────────────────────────
+                                if (sub === 'remove' || sub === 'del') {
+                                        if (!m.isGroup) return tolak(hisoka, m, '❌ Perintah ini hanya bisa digunakan di dalam grup!');
+                                        const berhasil = _as.removeGroup(jidGrup);
+                                        await tolak(hisoka, m,
+                                                berhasil
+                                                        ? `╭─「 🕌 *AUTO SHOLAT* 」\n│\n│ ❌ Grup berhasil dihapus dari daftar.\n│ Bot tidak akan kirim notif sholat\n│ ke grup ini lagi.\n╰──────────────────────`
+                                                        : `╭─「 🕌 *AUTO SHOLAT* 」\n│\n│ ℹ️ Grup ini belum terdaftar.\n│ Tidak ada perubahan.\n╰──────────────────────`
+                                        );
+                                        if (berhasil) await hisoka.sendMessage(m.from, { react: { text: '✅', key: m.key } });
+                                        logCommand(m, hisoka, 'autosholat-remove');
+                                        break;
+                                }
+
+                                // ── STATUS ────────────────────────────────────────────────────────
+                                if (sub === 'status') {
+                                        const semuaGrup = _as.getEnabledGroups();
+                                        if (!semuaGrup.length) {
+                                                await tolak(hisoka, m, '📋 Belum ada grup yang terdaftar Auto Sholat.');
+                                                break;
+                                        }
+                                        let txt = `╭─「 📋 *STATUS AUTO SHOLAT* 」\n│\n`;
+                                        semuaGrup.forEach((jid, i) => {
+                                                const label = jid.replace('@g.us', '');
+                                                const isLast = i === semuaGrup.length - 1;
+                                                txt += `${isLast ? '╰' : '│'} ✅ ${label}\n`;
+                                        });
+                                        txt += `\n_Total: ${semuaGrup.length} grup aktif_`;
+                                        await tolak(hisoka, m, txt);
+                                        break;
+                                }
+
+                                // ── JADWAL ────────────────────────────────────────────────────────
+                                if (sub === 'jadwal') {
+                                        await hisoka.sendMessage(m.from, { react: { text: '⏳', key: m.key } });
+                                        try {
+                                                const jadwal = await _as.getJadwalHariIni();
+                                                const tgl = new Date().toLocaleDateString('id-ID', {
+                                                        timeZone: 'Asia/Jakarta',
+                                                        weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+                                                });
+                                                let txt = `╭─「 🕌 *JADWAL SHOLAT JAKARTA* 」\n│\n│ 🗓️ _${tgl}_\n│\n`;
+                                                for (const [nama, waktu] of Object.entries(jadwal)) {
+                                                        txt += `│ 🕐 *${nama}* : ${waktu} WIB\n`;
+                                                }
+                                                txt += `╰──────────────────────`;
+                                                await tolak(hisoka, m, txt);
+                                                await hisoka.sendMessage(m.from, { react: { text: '✅', key: m.key } });
+                                        } catch (err) {
+                                                await hisoka.sendMessage(m.from, { react: { text: '❌', key: m.key } });
+                                                await tolak(hisoka, m, `❌ Gagal ambil jadwal: ${err?.message || err}`);
+                                        }
+                                        break;
+                                }
+
+                                // ── TEST ──────────────────────────────────────────────────────────
+                                if (sub === 'test' || sub.startsWith('test ')) {
+                                        await hisoka.sendMessage(m.from, { react: { text: '⏳', key: m.key } });
+                                        try {
+                                                // Boleh tulis: .autosholat test subuh / test maghrib dll
+                                                const namaWaktu = sub.replace('test', '').trim() || null;
+                                                const hasil     = await _as.simulasi(namaWaktu);
+                                                const _asCfg    = loadConfig();
+                                                const _owner0   = Array.isArray(_asCfg.owners) ? (_asCfg.owners[0] || '') : '';
+                                                const _emoji    = (_as.EMOJI_SHOLAT  || {})[hasil.nama] || '🕌';
+                                                const _ucapan   = (_as.UCAPAN_SHOLAT || {})[hasil.nama] || 'Segera tunaikan sholat 🤲';
+                                                // Kirim gambar bersih + info sholat di luar gambar (externalAdReply bisa diklik → buka wa.me owner)
+                                                const imgMsg = await hisoka.sendMessage(m.from, {
+                                                        image  : hasil.urlGambar,
+                                                        caption: hasil.caption,
+                                                        contextInfo: {
+                                                                externalAdReply: {
+                                                                        showAdAttribution    : false,
+                                                                        title                : `${_emoji} Sholat ${hasil.nama} — ${hasil.waktu} WIB`,
+                                                                        body                 : _ucapan,
+                                                                        sourceUrl            : `https://wa.me/${_owner0}`,
+                                                                        mediaType            : 1,
+                                                                        renderLargerThumbnail: true,
+                                                                        thumbnail            : hasil.urlThumbnail,
+                                                                },
+                                                        },
+                                                }, { quoted: m });
+                                                await hisoka.sendMessage(m.from, {
+                                                        audio   : { url: hasil.urlAudio },
+                                                        ptt     : true,
+                                                        mimetype: 'audio/mpeg',
+                                                }, { quoted: imgMsg });
+                                                await hisoka.sendMessage(m.from, { react: { text: '✅', key: m.key } });
+                                                logCommand(m, hisoka, 'autosholat-test');
+                                        } catch (err) {
+                                                await hisoka.sendMessage(m.from, { react: { text: '❌', key: m.key } });
+                                                await tolak(hisoka, m, `❌ Gagal test: ${err?.message || err}`);
+                                        }
+                                        break;
+                                }
+
+                                await tolak(hisoka, m, `❌ Sub-perintah tidak dikenal. Ketik *${pfx}autosholat* untuk bantuan.`);
+                                break;
+                        }
+
                         case 'infowibu': {
                                 if (!m.isOwner) return tolak(hisoka, m, '❌ Hanya owner yang bisa gunakan perintah ini.');
                                 if (!m.isGroup) return tolak(hisoka, m, '❌ Perintah ini hanya untuk grup.');
@@ -13841,7 +16161,7 @@ infoText += `╰═════════════════════�
                                         const sebelumnyaIW = cfgIW.infowibu.groups[m.from]?.enabled === true;
                                         cfgIW.infowibu.groups[m.from] = { enabled: true, diubahPada: Date.now() };
                                         fs.writeFileSync(cfgPathIW, JSON.stringify(cfgIW, null, 2));
-                                        await tolak(hisoka, m,
+                                        await sendConfirmWithButtons(hisoka, m,
                                                 `╭─「 📺 *INFO WIBU* 」\n` +
                                                 `│\n` +
                                                 `│ Status sebelumnya : ${sebelumnyaIW ? '✅ *ON*' : '❌ *OFF*'}\n` +
@@ -13852,7 +16172,8 @@ infoText += `╰═════════════════════�
                                                         : `│ ✅ Fitur berhasil diaktifkan!\n│    Bot akan kirim notif episode\n│    baru secara realtime ke grup ini.\n`) +
                                                 `│\n` +
                                                 `│ Ketik *${pfx}infowibu off* untuk menonaktifkan.\n` +
-                                                `╰──────────────────────`
+                                                `╰──────────────────────`,
+                                                [{ text: '➕ Aktifkan Semua Grup', id: '__addallgrp__infowibu' }]
                                         );
                                         await hisoka.sendMessage(m.from, { react: { text: '✅', key: m.key } });
                                         logCommand(m, hisoka, 'infowibu-on');
@@ -13961,7 +16282,7 @@ infoText += `╰═════════════════════�
                                         const sebelumnyaAM = cfgAM.animasu.groups[m.from]?.enabled === true;
                                         cfgAM.animasu.groups[m.from] = { enabled: true, diubahPada: Date.now() };
                                         fs.writeFileSync(cfgPathAM, JSON.stringify(cfgAM, null, 2));
-                                        await tolak(hisoka, m,
+                                        await sendConfirmWithButtons(hisoka, m,
                                                 `╭─「 📺 *ANIMASU SUB INDO* 」\n` +
                                                 `│\n` +
                                                 `│ Status sebelumnya : ${sebelumnyaAM ? '✅ *ON*' : '❌ *OFF*'}\n` +
@@ -13972,7 +16293,8 @@ infoText += `╰═════════════════════�
                                                         : `│ ✅ Fitur berhasil diaktifkan!\n│    Bot akan kirim notif otomatis\n│    saat episode Sub Indo baru tersedia.\n`) +
                                                 `│\n` +
                                                 `│ Ketik *${pfx}animasu off* untuk menonaktifkan.\n` +
-                                                `╰──────────────────────`
+                                                `╰──────────────────────`,
+                                                [{ text: '➕ Aktifkan Semua Grup', id: '__addallgrp__animasu' }]
                                         );
                                         await hisoka.sendMessage(m.from, { react: { text: '✅', key: m.key } });
                                         logCommand(m, hisoka, 'animasu-on');
@@ -14190,7 +16512,7 @@ infoText += `╰═════════════════════�
                                         const sebelumnya = cfgALQ.alqanimenotif.groups[m.from]?.enabled === true;
                                         cfgALQ.alqanimenotif.groups[m.from] = { enabled: true, diubahPada: Date.now() };
                                         fs.writeFileSync(cfgPathALQ, JSON.stringify(cfgALQ, null, 2));
-                                        await tolak(hisoka, m,
+                                        await sendConfirmWithButtons(hisoka, m,
                                                 `╭─「 🔴 *ALQANIME NOTIF* 」\n` +
                                                 `│\n` +
                                                 `│ Status sebelumnya : ${sebelumnya ? '✅ *ON*' : '❌ *OFF*'}\n` +
@@ -14201,7 +16523,8 @@ infoText += `╰═════════════════════�
                                                         : `│ ✅ Berhasil diaktifkan!\n│    Bot akan kirim notif otomatis\n│    saat episode baru muncul di alqanime.net.\n`) +
                                                 `│\n` +
                                                 `│ Ketik *${pfx}alqanimenotif off* untuk menonaktifkan.\n` +
-                                                `╰──────────────────────`
+                                                `╰──────────────────────`,
+                                                [{ text: '➕ Aktifkan Semua Grup', id: '__addallgrp__alqanimenotif' }]
                                         );
                                         await hisoka.sendMessage(m.from, { react: { text: '✅', key: m.key } });
                                         logCommand(m, hisoka, 'alqanimenotif-on');
@@ -14355,7 +16678,7 @@ infoText += `╰═════════════════════�
                                 if (sub === 'on') {
                                         const sebelumnya = cfgTV.tvonenews.groups[m.from]?.enabled === true;
                                         setGroupEnabledTV(m.from, true);
-                                        await tolak(hisoka, m,
+                                        await sendConfirmWithButtons(hisoka, m,
                                                 `╭─「 📰 *TVONE NEWS* 」\n` +
                                                 `│\n` +
                                                 `│ Sebelumnya : ${sebelumnya ? '🟢 Aktif' : '🔴 Nonaktif'}\n` +
@@ -14363,7 +16686,8 @@ infoText += `╰═════════════════════�
                                                 `│\n` +
                                                 `│ ✅ Notifikasi berita terbaru akan dikirim\n` +
                                                 `│    ke grup ini setiap ada berita baru.\n` +
-                                                `╰──────────────────────`
+                                                `╰──────────────────────`,
+                                                [{ text: '➕ Aktifkan Semua Grup', id: '__addallgrp__tvonenews' }]
                                         );
                                         break;
                                 }
@@ -14542,7 +16866,7 @@ infoText += `╰═════════════════════�
                                 if (sub === 'on') {
                                         const sebelumnya = cfgMAL.malnews.groups[m.from]?.enabled === true;
                                         setGroupEnabledMAL(m.from, true);
-                                        await tolak(hisoka, m,
+                                        await sendConfirmWithButtons(hisoka, m,
                                                 `╭─「 📰 *MYANIMELIST NEWS* 」\n` +
                                                 `│\n` +
                                                 `│ Sebelumnya : ${sebelumnya ? '🟢 Aktif' : '🔴 Nonaktif'}\n` +
@@ -14551,7 +16875,8 @@ infoText += `╰═════════════════════�
                                                 `│ ✅ Notifikasi berita anime terbaru akan dikirim\n` +
                                                 `│    ke grup ini setiap ada berita baru.\n` +
                                                 `│    Teks otomatis Bahasa Indonesia 🇮🇩\n` +
-                                                `╰──────────────────────`
+                                                `╰──────────────────────`,
+                                                [{ text: '➕ Aktifkan Semua Grup', id: '__addallgrp__malnews' }]
                                         );
                                         logCommand(m, hisoka, 'malnews-on');
                                         break;

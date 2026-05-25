@@ -1,5 +1,12 @@
 {
   "name": "☁️",
   "updatedAt": "2026-05-17T12:00:32.779Z",
-  "firstSeen": "2026-05-17T12:00:32.779Z"
+  "firstSeen": "2026-05-17T12:00:32.779Z",
+  "aiMemory": {
+    "style": null,
+    "nickname": null,
+    "lang": null,
+    "lastUpdated": null,
+    "msgCount": 0
+  }
 }

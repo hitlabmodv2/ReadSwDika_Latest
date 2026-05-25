@@ -90,6 +90,8 @@ export class JSONDB {
                 this.loadIfNeeded();
                 this.cache[key] = value;
                 const data = JSON.stringify(this.cache, null, 2);
+                const dir = path.dirname(this.filePath);
+                if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
                 fs.writeFileSync(this.filePath, data, 'utf-8');
                 return value;
         }
@@ -98,6 +100,8 @@ export class JSONDB {
                 this.loadIfNeeded();
                 delete this.cache[key];
                 const data = JSON.stringify(this.cache, null, 2);
+                const dir = path.dirname(this.filePath);
+                if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
                 fs.writeFileSync(this.filePath, data, 'utf-8');
         }
 

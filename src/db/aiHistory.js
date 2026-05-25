@@ -1,7 +1,34 @@
+/**
+ * ───────────────────────────────
+ *  Base Script : Bang Dika Ardnt
+ *  Recode By   : Bang Wilykun
+ *  WhatsApp    : 6289688206739
+ *  Telegram    : @Wilykun1994
+ * ───────────────────────────────
+ *  Script ini khusus donasi/VIP
+ *  Support dari kalian bikin saya
+ *  makin semangat update fitur,
+ *  fix bug, dan rawat script ini.
+ *
+ *  Dilarang menjual ulang script ini
+ *  Tanpa izin resmi dari developer.
+ *  Jika ketahuan = NO UPDATE / NO FIX
+ *
+ *  Hargai karya, gunakan dengan bijak.
+ *  Terima kasih sudah support.
+ * ───────────────────────────────
+ */
 'use strict';
 
 import path from 'path';
 import fs from 'fs';
+
+let _writeLock = Promise.resolve();
+function withWriteLock(fn) {
+    const next = _writeLock.then(() => fn()).catch(() => fn());
+    _writeLock = next.then(() => {}, () => {});
+    return next;
+}
 
 const DATA_DIR             = path.join(process.cwd(), 'data');
 const AI_FILE              = path.join(DATA_DIR, 'ai', 'history.json');
@@ -138,19 +165,21 @@ export function getHistory(sessionKey) {
 }
 
 export function addToHistory(sessionKey, userText, botText, meta = {}) {
-    const all      = readAll();
-    const existing = all.sessions[sessionKey] || { messages: [], lastActivity: 0 };
-    const messages = Array.isArray(existing.messages) ? existing.messages : [];
-    const ts       = Date.now();
-    const sharedMeta = { ...meta, timestamp: meta.timestamp || ts };
+    return withWriteLock(() => {
+        const all      = readAll();
+        const existing = all.sessions[sessionKey] || { messages: [], lastActivity: 0 };
+        const messages = Array.isArray(existing.messages) ? existing.messages : [];
+        const ts       = Date.now();
+        const sharedMeta = { ...meta, timestamp: meta.timestamp || ts };
 
-    messages.push({ role: 'user',  parts: [{ text: enrichUserText(clip(userText, MAX_TEXT_PER_MESSAGE), sharedMeta) }] });
-    messages.push({ role: 'model', parts: [{ text: enrichBotText(clip(botText,  MAX_TEXT_PER_MESSAGE), { timestamp: ts }) }] });
+        messages.push({ role: 'user',  parts: [{ text: enrichUserText(clip(userText, MAX_TEXT_PER_MESSAGE), sharedMeta) }] });
+        messages.push({ role: 'model', parts: [{ text: clip(botText, MAX_TEXT_PER_MESSAGE) }] });
 
-    while (messages.length > MAX_HISTORY_MESSAGES) messages.splice(0, 2);
+        while (messages.length > MAX_HISTORY_MESSAGES) messages.splice(0, 2);
 
-    all.sessions[sessionKey] = { messages, lastActivity: ts };
-    writeAll(all);
+        all.sessions[sessionKey] = { messages, lastActivity: ts };
+        writeAll(all);
+    });
 }
 
 export function wrapCurrentUserMessage(userText, meta = {}) {
@@ -184,17 +213,21 @@ export function buildHistoryMeta(m, extra = {}) {
 }
 
 export function clearHistory(sessionKey) {
-    const all = readAll();
-    delete all.sessions[sessionKey];
-    writeAll(all);
+    return withWriteLock(() => {
+        const all = readAll();
+        delete all.sessions[sessionKey];
+        writeAll(all);
+    });
 }
 
 export function clearAllHistory() {
-    const all   = readAll();
-    const count = Object.keys(all.sessions).length;
-    all.sessions = {};
-    writeAll(all);
-    return count;
+    return withWriteLock(() => {
+        const all   = readAll();
+        const count = Object.keys(all.sessions).length;
+        all.sessions = {};
+        writeAll(all);
+        return count;
+    });
 }
 
 export function countHistory() {

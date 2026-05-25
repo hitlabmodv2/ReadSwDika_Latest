@@ -1,213 +1,187 @@
-🤖 *WILY BOT — V17.3*
-_📅 15 Mei 2026_
-📦 12 Update | 🔧 6 Bug Fix | ✨ 1 Fitur Baru | 🚀 5 Improvement
+🤖 *WILY BOT — V18*
+
+✨ *15 Fitur Baru*
+🔧 *10 Bug Fix*
+🚀 *10 Improvement*
 
 ━━━━━━━━━━━━━━━━━━━━━━
-
-🚀 *IMPROVEMENT*
-
-> 🎯 *`.ceksw` — Tampilan Lebih Ringkas*
-> Output `.ceksw` dirampingkan jadi 1 baris per orang di semua section
-> ├ *SW AKTIF SEKARANG* — tiap baris: medal + nama + jumlah SW (hapus bar progress & ikon 🟢 per baris)
-> ├ *TOP TERBANYAK DI-REACT* — tiap baris: medal + nama + ×reaction (persen) saja
-> └ Tidak ada duplikasi info — ikon & detail cukup tampil 1x di header section
->
-> 🎯 *`push.sh` — Nomor Menu Berurutan*
-> Penomoran menu utama diurutkan ulang agar berurutan dalam tiap group
-> ├ BRANCH: 1–7 (1=Upload, 2=Buat, 3=Hapus, 4=Ganti default, 5=Cek token, 6=Edit nama, 7=Status)
-> └ REPOSITORY: 8–14 (8=Rename, 9=Buat, 10=Import, 11=Hapus, 12=Semua, 13=Releases, 14=Ganti repo)
-
-━━━━━━━━━━━━━━━━━━━━━━
-
-🔧 *BUG FIX*
-
-> 🎯 *No-Prefix Command — Respons Tidak Akurat (Extra Words)*
-> Command tanpa prefix merespons meski ada kata tambahan di belakangnya
-> Contoh: mengetik `info dulu` atau `ping bla bla` tanpa prefix → bot merespons
-> Harusnya command no-prefix hanya merespons kalau diketik *persis* tanpa kata tambahan
-> Diperbaiki dengan guard `if (!m.prefix && m.query) break` di setiap command standalone
-> Command yang butuh query (seperti `tanya`, `cuaca`, dll) tidak terpengaruh
-> Berlaku di bot utama maupun userjadibot — handler sama (`message.js`)
->
-> *Command standalone yang kini dilindungi (29 guard total):*
-> ├ `info`
-> ├ `ping` / `p`
-> ├ `menu` / `allmenu` / `settingmenu` / `groupmenu` / `statusmenu` / `downloadmenu`
-> ├ `jadibotmenu` / `ownermenu`
-> ├ `owner` / `own`
-> ├ `listbot` / `listemoji`
-> ├ `q` / `quoted`
-> ├ `memori` / `mymemory` / `myprofile`
-> ├ `memory` _(memory monitor — command berbeda dari alias memori)_
-> ├ `lupakanaku` / `resetmemori` / `resetmemory` / `forgetme`
-> ├ `speedtest` / `speed` / `cekspeed` / `testnet`
-> ├ `ram`
-> ├ `group` / `listgroup`
-> ├ `contact` / `listcontact`
-> ├ `dbstats` / `sessiondb` / `sessionstat`
-> ├ `nhrand`
-> ├ `komikupdate` / `komikup`
-> ├ `kusoupdate` / `kusonimeupdate` / `animeupdate`
-> ├ `alqupdate` / `alqanimeupdate`
-> ├ `cekreact` / `reactinfo`
-> ├ `backup`
-> ╰ `ceksesi`
-
-> 🎌 *Animasu — URL Anime Season Ke-2/3 Selalu 404*
-> Slug di URL Animasu tidak konsisten untuk season lanjutan
-> Contoh: anime pakai `-s2` bukan `-season-2`, atau slug beda total
-> Ditambahkan `fetchAnimeUrlFromEpisodePage()` sebagai fallback
-> Fungsi ambil URL anime asli dari halaman episode langsung
-> Berlaku di `cariEpisodeBaru()`, `simulasi()`, `getAiringStatus()`
-
-> 🔁 *Animasu — Fungsi simulasi() Tidak Pakai Fallback URL*
-> `simulasi()` langsung crash kalau slug anime 404
-> Kini pakai fallback URL sama seperti `cariEpisodeBaru()`
-
-> 📊 *Animasu — getAiringStatus() Diam-diam Drop Anime Season*
-> Anime season ke-2/3 selalu gagal fetch dan dibuang tanpa error
-> `postLink` tidak disimpan di map sehingga fallback tidak bisa jalan
-> Kini `postLink` disimpan di map dan fallback aktif untuk semua entry
-
-> 📨 *Animasu — Notifikasi Episode Sama Muncul 2 Kali*
-> Animasu terkadang upload 2 post berbeda untuk 1 episode yang sama
-> Kedua post punya ID berbeda sehingga lolos dedup `idTerkirim`
-> Kini dedup tambahan by `animeSlug + epNum` sebelum kirim
-
-> ⚡ *Speedtest — require is not defined di message.js*
-> `message.js` pakai ES module, tidak bisa pakai `require()` langsung
-> Command `.speedtest` error saat pertama dijalankan
-> Diganti ke `_require()` (createRequire) sesuai pola file lain
-
-━━━━━━━━━━━━━━━━━━━━━━
-
-🚀 *IMPROVEMENT / OPTIMASI*
-
-> 📡 *Notifikasi Grup — Kirim Parallel, Bukan Satu-satu*
-> Sebelumnya kirim ke grup satu per satu dengan jeda 2 detik
-> 10 grup = ~20 detik, sekarang jadi ~2 detik
-> Berlaku untuk 3 scheduler: Animasu, InfoWibu, TVOneNews
-> Implementasi: batch 5 grup sekaligus via `Promise.allSettled()`
-> Jeda 1 detik antar batch untuk cegah rate limit WhatsApp
-
-> 📋 *Menu Bot — 8 Command Ditambahkan ke Kategori yang Tepat*
-> Banyak command aktif tapi tidak tampil di `.menu`
-> Ditambahkan ke kategori yang sesuai:
-> ├ 🔍 Info & Cek  : `.speedtest` `.speed` `.cekspeed`
-> ├ 🔍 Info & Cek  : `.shazam` `.tebaklagu` (alias .whatsmusik)
-> ├ 🤖 AI Chat     : `.myprofile` (alias .mymemory)
-> ├ 🤖 AI Chat     : `.resetmemory` (alias .forgetme)
-> ├ 👑 Owner Only  : `.tvone` — auto berita TVOne di grup
-> ├ 👑 Owner Only  : `.cekreact` `.reactinfo` — cek saldo React API
-> ├ 👑 Owner Only  : `.ram` — cek detail RAM & memory bot
-> ├ 👑 Owner Only  : `.sessionstat` — statistik file sesi
-> ╰ Footer menu   : `.statusmenu` ditambahkan ke daftar sub-menu
-
-━━━━━━━━━━━━━━━━━━━━━━
-
 ✨ *FITUR BARU*
+━━━━━━━━━━━━━━━━━━━━━━
 
-> 🌐 *Internet Speed Test — Command .speedtest*
+> 🎵 *Musik AI — `.musikai`*
+> Generate lagu original dengan AI dari judul & genre pilihan
+> Hasil langsung 2 variasi sekaligus, pilih format MP3 atau Voice Note
+> Ganti model AI (v4 / v5 / v5.5) langsung dari hasil tanpa ulang input
+> Mode instrumental tersedia — tanpa vokal, fokus ke melodi
+> Alias: `.musikai` `.aimusik`
+
+> ⚙️ *Command `.cekauto`*
+> Cek status semua fitur auto bot dalam 1 pesan
+> Tampilkan mana yang aktif 🟢 dan nonaktif 🔴
+> Mencakup 21 fitur: AI, notif, anti-call, cleaner, dll
+> Alias: `.cekauto` `.cekfitur` `.autolist`
+
+> 🏘️ *Command `.cekauto gc`*
+> Versi grup dari `.cekauto` — cek & toggle fitur per grup
+> Lihat semua grup yang aktif untuk tiap fitur sekaligus
+> Aktifkan / nonaktifkan fitur untuk grup tertentu langsung
+> Matikan semua fitur grup dalam 1 klik
+
+> 🔞 *Anti-Porn*
+> Deteksi & hapus otomatis konten 18+ di grup
+> Pakai AI lokal, tanpa API key — gambar, stiker, video
+> Warning bertahap → auto-kick saat limit, owner bypass
+
+> 🌐 *Speedtest*
 > Test kecepatan internet bot secara realtime
-> Menggunakan Cloudflare Speed Server (speed.cloudflare.com)
-> Tanpa library biner eksternal — murni axios
-> Mengukur: Download Mbps, Upload Mbps, Ping avg/min/max/jitter
-> Info koneksi: ISP, kota, negara, IP address
-> Thumbnail: gambar PNG custom dibuat real-time (SVG → PNG via sharp)
-> Warna kartu berubah sesuai hasil: hijau cepat, merah lambat
-> Selesai dalam ~3–5 detik
-> Alias aktif: `.speedtest` `.speed` `.cekspeed` `.testnet`
-> File: `src/scrape/speedtest.cjs`
+> Download, Upload, Ping, Jitter + info ISP & IP
+> Alias: `.speedtest` `.speed` `.cekspeed` `.testnet`
+
+> 📰 *MAL News*
+> Notifikasi berita anime dari MyAnimeList ke grup WA
+> Auto-translate judul & ringkasan ke Bahasa Indonesia
+> Aktifkan per grup: `.malnews`
+
+> 📺 *TVOne News*
+> Notifikasi berita terkini dari TVOne ke grup WA
+> Update otomatis, lengkap gambar, kategori & link
+> Aktifkan per grup: `.tvone`
+
+> 🖼️ *Command `.hd` / `.remini`*
+> Perjelas foto blur — kini bisa dipakai user Jadibot
+
+> 📡 *Command `.upswgc` — Kini bisa dipakai user Jadibot*
+> Upload status/story ke semua grup langsung dari jadibot
+> Support kirim gambar, video, audio, atau teks biasa
+> Muncul di menu jadibot seksi STATUS & STORY
+
+> 🤖 *AI Format WA*
+> Respons Gemini otomatis diformat pakai simbol WA
+> Bold, italic, bullet, header — rapi tanpa markdown
+
+> 🎌 *Alqanime Notif — Deteksi Tipe Rilisan Otomatis*
+> Caption header kini tampil dinamis sesuai tipe rilisan
+> Batch → `📺 Batch 01-12`
+> Episode ongoing → `📺 Episode 07`
+> Movie / OVA → `📺 Movie / OVA`
+> Tidak perlu setting manual — otomatis deteksi dari judul & data web
+
+> 🎌 *Alqanime Notif — Info Batch di Caption*
+> Caption batch kini tampil info lengkap: total episode & status BD/Bluray
+> `📦 Episode : 12 Episode` — dihitung dari range judul (bukan jumlah file)
+> `💿 Format  : BD / Bluray` — muncul hanya kalau judul mengandung BD/Blu-ray
+> Non-batch & movie/OVA tidak terpengaruh — field muncul hanya bila relevan
+
+> ⚙️ *Command `.setpairing`*
+> Atur mode pengiriman kode pairing saat aktivasi Jadibot
+> `.setpairing v1` → kode & notif tampil di GC / owner bot
+> `.setpairing v2` → kode dikirim langsung ke nomor tujuan (default)
+> Alias: `.setpairing v1` `.setpairing v2`
+
+> 🎵 *Command `.tovn`*
+> Konversi file audio atau MP3 menjadi Voice Note WhatsApp
+> Reply pesan audio/dokumen MP3, lalu ketik `.tovn`
+> Output langsung terkirim sebagai voice note bisa diputar
+
+> 🎵 *Command `.tomp3`*
+> Konversi Voice Note WhatsApp menjadi file MP3
+> Reply voice note, lalu ketik `.tomp3`
+> Output terkirim sebagai file audio yang bisa diunduh
 
 ━━━━━━━━━━━━━━━━━━━━━━
-🤖 *Wily-Bot* | *V17.3* | _14 Mei 2026_
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-🤖 *WILY BOT — V16*
-_📅 11 Mei 2026_
-📦 6 Update | 🔧 4 Bug Fix | ✨ 2 Fitur Baru
-
-━━━━━━━━━━━━━━━━━━━━━━
-
 🔧 *BUG FIX*
-
-> 🛡️ *Anti Call — Jadibot QR Tidak Bisa Tolak Panggilan*
-> Listener event `call` hilang di mode QR
-> Jadibot QR tidak bisa tolak panggilan sama sekali
-> Kini dipasang di *Pairing Code* & *QR Code*
-> Berlaku untuk panggilan *suara* & *video*
-> Whitelist & pesan tolak custom tetap per nomor jadibot
-
-> 🔕 *Anti Call — Command Tidak Direspons Jadibot*
-> `anticall` `ac` `anticallvid` `acv` tidak ada di whitelist
-> Bot diam saja saat command dikirim ke nomor jadibot
-> Semua alias sudah ditambahkan ke allowed command jadibot
-
-> 🚧 *Anti Call — Diblock saat Kirim ke Bot Utama*
-> User jadibot diblock guard saat kirim command ke bot utama
-> Guard lama hanya izinkan: `jadibot` `stopbot` `listbot`
-> Kini `anticall` & `anticallvid` ikut diizinkan tembus guard
-
-> 💾 *Anti Call — Setting Tersimpan ke Tempat yang Salah*
-> Setting tersimpan ke config bot utama, bukan ke jadibot
-> Handler tidak bisa deteksi konteks sender jadibot
-> Kini handler cek sender di `jadibotMap` secara realtime
-> Setting tersimpan ke `jadibot_settings.json[nomor]` yang benar
-> Tidak ada bentrok antar jadibot maupun bot utama
-
 ━━━━━━━━━━━━━━━━━━━━━━
 
-✨ *FITUR BARU / TAMBAHAN*
+> 🤖 *Jadibot — Durasi Reset ke 1 Hari Setelah Restart*
+> Semua jadibot (permanent maupun berdurasi) kembali ke 1 hari
+> setiap kali panel di-restart
+> Penyebab: fallback auto-start membuat expiry baru 24 jam
+> saat data tidak ditemukan — kini fallback ke *permanent*
 
-> 🖼️ *Command .hd — Kini Bisa Dipakai User Jadibot*
-> `.hd` / `.remini` kini bisa dipakai user jadibot
-> Ditambahkan ke whitelist command jadibot
-> Tampil di menu jadibot seksi *STICKER & GAMBAR*
+> 🤖 *Jadibot — `.upbot permanent` Hapus Data*
+> Command `.upbot [nomor] permanent` justru menghapus data
+> jadibot dari penyimpanan, sehingga saat restart data hilang
+> dan terkena bug reset di atas
+> Kini memanggil fungsi yang benar: simpan status permanent
 
-> 📋 *Menu Jadibot — Diperbarui & Lebih Lengkap*
-> Seksi sticker berganti jadi *STICKER & GAMBAR*
-> Menampilkan `.hd` / `.remini` sebagai opsi baru
-> Menu kini mencerminkan semua command yang aktif
+> ⚠️ *Jadibot — Pesan Peringatan Selalu Saran "1 hari"*
+> Pesan "jadibot hampir habis" selalu menyarankan perpanjang
+> dengan durasi 1 hari, padahal durasi asli bot bisa berbeda
+> Kini saran perpanjang mengikuti durasi bot yang sebenarnya
+> Contoh: bot 10 hari → saran `.jadibot xxx 10 hari`
+
+> 🔄 *Bot — Error `rate-overlimit` Saat Fetch Grup*
+> Saat startup, fetch semua grup kadang gagal karena rate-limit WA
+> Kini ada retry otomatis dengan delay bertahap (hingga 5x coba)
+> Bot lebih stabil dan tidak perlu restart manual
+
+> 🎯 *No-Prefix Command*
+> Bot tidak lagi respons kalau ada kata tambahan di belakang
+> 29 command standalone kini dilindungi guard extra words
+
+> 🎌 *Animasu — URL Season 2/3*
+> Slug tidak konsisten → fallback ambil URL dari halaman episode
+> `simulasi()` crash saat 404 → pakai fallback URL
+> `getAiringStatus()` diam-diam drop season lanjutan → diperbaiki
+> Notifikasi episode sama muncul 2x → dedup by slug + epNum
+
+> 🎌 *Alqanime Notif — Fetch & Timing*
+> Post gagal-fetch tidak dicoba ulang → retry TTL 30 menit
+> Post di batas window sering terlewat → buffer waktu +3 menit
+
+> 🎌 *Alqanime Notif — Batch Tampil "Episode 1" Padahal Completed*
+> Anime batch (misal 1–12) mengirim notif dengan header `Episode 1`
+> padahal status sudah Completed dan download tersedia sampai ep terakhir
+> Penyebab: `epNum` diambil dari parse judul card yang baca "Episode 1"
+> bukan dari episode terbaru di daftar download
+> Kini header & download selalu sinkron ke episode terbaru yang real
+
+> ⚡ *Speedtest*
+> `require is not defined` di ES module → diganti `_require()`
+
+> 🛡️ *Anti Call Jadibot*
+> Tidak bisa tolak panggilan di mode QR → diperbaiki
+> Command `ac` / `acv` tidak direspons → whitelist ditambah
+> Diblock guard saat kirim ke bot utama → guard diperbarui
+> Setting tersimpan ke bot utama → kini per nomor jadibot
 
 ━━━━━━━━━━━━━━━━━━━━━━
-
-📋 *AKSES USER JADIBOT — TERBARU*
-
-> 🌐 *Umum*
-> `.ping` / `.p` — cek status & ping bot
-> `.menu` — lihat menu jadibot + sisa masa aktif
-
-> ⚙️ *Setting*
-> `.antidel` / `.ad` — anti delete on/off _(per jadibot)_
-> `.readsw` — auto read story on/off _(per jadibot)_
-> `.anticall` / `.ac` — tolak panggilan suara _(per jadibot)_ ✅ *baru*
-> `.anticallvid` / `.acv` — tolak panggilan video _(per jadibot)_ ✅ *baru*
-
-> 🎨 *Sticker & Gambar*
-> `.sticker` / `.s` — buat sticker dari gambar/video
-> `.toimg` — konversi sticker ke gambar
-> `.hd` / `.remini` — perjelas foto blur ✅ *baru*
-> `.rvo` / `.vo` / `.viewonce` — buka pesan view once
-
-> 📥 *Download*
-> `.tt` — TikTok
-> `.ig` — Instagram
-> `.fb` — Facebook
-> `.ytmp3` — YouTube Audio
-> `.ytmp4` — YouTube Video
-> `.play` — cari & download lagu
-
+🚀 *IMPROVEMENT*
 ━━━━━━━━━━━━━━━━━━━━━━
 
-📦 *DATA STORAGE — AKURAT & NO BENTROK*
+> 🎵 *Musik AI — Vokal Paralel*
+> Sebelumnya user harus pilih gender vokal dulu, baru generate
+> Kini pria & wanita di-generate *bersamaan* — semua variasi
+> langsung muncul tanpa langkah tambahan, lebih cepat & praktis
 
-> 💾 *Semua Setting Tersimpan Per Nomor Jadibot*
-> `[nomor].anticall` — anti call suara
-> `[nomor].anticallvid` — anti call video
-> `[nomor].antidel` — anti delete
-> `[nomor].readsw` — auto read story
-> _Lokasi: `data/jadibot_settings.json`_
+> 🎵 *Musik AI — Genre Dinamis oleh Gemini*
+> Sebelumnya genre dikunci maksimal 1-2 di prompt AI
+> Kini Gemini bebas tentukan berapa genre yang cocok — bisa 3 atau lebih
+> sesuai karakter dan gaya rilisan lagunya (realtime, tidak hardcoded)
+> Berlaku untuk semua mode: tema bebas, random ID/EN/JP
+
+> 🎌 *Alqanime Notif — Movie / OVA Lebih Akurat*
+> Field `📦 Episode` kini disembunyikan untuk tipe movie/OVA
+> Sebelumnya muncul `Episode : 1` yang tidak relevan untuk film/OVA
+> Label header kini spesifik: judul ada "OVA" → `OVA`, ada "Movie" → `Movie`
+> Jika keduanya tidak ada → fallback ke `Movie / OVA`
+
+> 🤖 *Jadibot — Auto-Start Lebih Akurat*
+> Jadibot lama (sebelum fitur data expiry ada) tidak lagi di-reset
+> durasinya saat restart — otomatis dijaga sebagai permanent
+
+> 📋 *Menu Bot — Audit & Koreksi*
+> Versi seluruh menu diperbarui dari V17 → V18 (9 tempat)
+> `musikai / aimusik`, `musikai2 / aimusik2` ditambah ke INFO & CEK
+> `tovn` & `tomp3` ditambah ke seksi PESAN & STICKER
+> `antiporn` ditambah ke ANTI FITUR di semua menu relevan
+> `komikinfo` ditambah ke `downloadmenu` seksi ANIME & MANGA
+> `setpairing v1/v2` ditambah ke JADIBOT & `jadibotmenu`
+
+> 🎯 *`.ceksw`* — Tampilan diringkas, 1 baris per orang
+> 🎯 *`push.sh`* — Nomor menu diurutkan ulang per group
+> 📡 *Notif Grup* — Kirim parallel, dari ~20 detik jadi ~2 detik
+> 📋 *Menu Jadibot* — Seksi Sticker & Gambar diperbarui + `.hd`
 
 ━━━━━━━━━━━━━━━━━━━━━━
-🤖 *Wily-Bot* | *V16* | _11 Mei 2026_
+🤖 *Wily-Bot* | *V18* | _23 Mei 2026_

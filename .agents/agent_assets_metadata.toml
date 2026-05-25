@@ -1,0 +1,217 @@
+uploads = []
+
+[[generated]]
+id = "PmR0UhVHpEfq1_5NA_oV6"
+uri = "file://img/sholat/subuh.png"
+type = "image"
+title = "masjid subuh fajar"
+
+[[generated]]
+id = "Csyt4JYSxWlFPcLCYyQZM"
+uri = "file://img/sholat/zuhur.png"
+type = "image"
+title = "masjid zuhur siang"
+
+[[generated]]
+id = "Svhb6SSv-dgyBC3GKb5Qw"
+uri = "file://img/sholat/ashar.png"
+type = "image"
+title = "masjid ashar golden hour"
+
+[[generated]]
+id = "yH71hjSCtGvdCvnWT0D73"
+uri = "file://img/sholat/maghrib.png"
+type = "image"
+title = "masjid maghrib sunset"
+
+[[generated]]
+id = "jpdZyW-f9QqJGmwKVbieE"
+uri = "file://img/sholat/isya.png"
+type = "image"
+title = "masjid isya malam"
+
+[[outputs]]
+id = "XHHvFLh_tTXfR1Nem4KPD"
+uri = "file://Perjalanan_Hidup_v1.mp3"
+type = "audio"
+title = "Perjalanan Hidup - Versi 1 (AI Generated)"
+
+[[outputs]]
+id = "VpwnSP7EemMjedo1fqQ-7"
+uri = "file://Janji_Selamanya_v1.mp3"
+type = "audio"
+title = "Janji Selamanya | 21 Mei 2026 | Indonesian Slow Rock Ballad — Versi 1 (6:30)"
+
+[[outputs]]
+id = "uWp9dk9U1x2IFne39iKEK"
+uri = "file://Janji_Selamanya_v2.mp3"
+type = "audio"
+title = "Janji Selamanya | 21 Mei 2026 | Indonesian Slow Rock Ballad — Versi 2 (4:28)"
+
+[[outputs]]
+id = "Z4jnlE9vjopm0KWaLqTKw"
+uri = "file://Hujan_Malam_v1.mp3"
+type = "audio"
+title = "Hujan Malam | 21 Mei 2026 | Sad Pop, Melancholic Rain Vibes — Versi 1 (5:23)"
+
+[[outputs]]
+id = "fYOAtV5XY413QgtQbsvQE"
+uri = "file://Hujan_Malam_v2.mp3"
+type = "audio"
+title = "Hujan Malam | 21 Mei 2026 | Sad Pop, Melancholic Rain Vibes — Versi 2 (4:24)"
+
+[[outputs]]
+id = "DGJ0lDqrKqMvtjuN_DNbX"
+uri = "file://Kienai_Namida_v1.mp3"
+type = "audio"
+title = "消えない涙 (Kienai Namida) | 21 Mei 2026 | Japanese Sad Ballad, Anime OST — Versi 1 (5:10)"
+
+[[outputs]]
+id = "VxaYsl80o09Mw1M1DLYnn"
+uri = "file://Kienai_Namida_v2.mp3"
+type = "audio"
+title = "消えない涙 (Kienai Namida) | 21 Mei 2026 | Japanese Sad Ballad, Anime OST — Versi 2 (5:49)"
+
+[[outputs]]
+id = "JLzl5oqRovasmwuq9c18g"
+uri = "file://attached_assets/sholat_preview/Subuh_0_photo-1542816417-0983c9c9ad53.jpg"
+type = "image"
+title = "🌙 SUBUH - kandidat 1"
+
+[[outputs]]
+id = "uiNZxWEqc2HdT4_H21Zpk"
+uri = "file://attached_assets/sholat_preview/Subuh_1_photo-1507679799987-c73779587ccf.jpg"
+type = "image"
+title = "🌙 SUBUH - kandidat 2"
+
+[[outputs]]
+id = "knza9an6N4hzuqVn2Nb46"
+uri = "file://attached_assets/sholat_preview/Subuh_2_photo-1519096845289-95806ee03a1a.jpg"
+type = "image"
+title = "🌙 SUBUH - kandidat 3"
+
+[[outputs]]
+id = "tagpLhH-8WkNMoU42azUc"
+uri = "file://attached_assets/sholat_preview/Zuhur_0_photo-1564769662533-4f00a87b4056.jpg"
+type = "image"
+title = "☀️ ZUHUR - kandidat 1"
+
+[[outputs]]
+id = "Uc5161uXkQhGSkpJCBFxe"
+uri = "file://attached_assets/sholat_preview/Zuhur_1_photo-1555116505-38ab61800975.jpg"
+type = "image"
+title = "☀️ ZUHUR - kandidat 2"
+
+[[outputs]]
+id = "lylCTyaeTZD7VYemgLfA3"
+uri = "file://attached_assets/sholat_preview/Zuhur_2_photo-1573843981267-be1999ff37cd.jpg"
+type = "image"
+title = "☀️ ZUHUR - kandidat 3"
+
+[[outputs]]
+id = "c_D2S2w-QUVJMQADi0OM1"
+uri = "file://attached_assets/sholat_preview/Ashar_0_photo-1519817914152-22d216bb9170.jpg"
+type = "image"
+title = "🌤️ ASHAR - kandidat 1"
+
+[[outputs]]
+id = "G6ETsCkHR6zSoCypwqEuN"
+uri = "file://attached_assets/sholat_preview/Ashar_1_photo-1548690312-e3b507d8c110.jpg"
+type = "image"
+title = "🌤️ ASHAR - kandidat 2"
+
+[[outputs]]
+id = "S0SN1WnuYh18QROzt1mos"
+uri = "file://attached_assets/sholat_preview/Ashar_2_photo-1590069261209-f8e9b8642343.jpg"
+type = "image"
+title = "🌤️ ASHAR - kandidat 3"
+
+[[outputs]]
+id = "lsePDDmmUkkwDLOmsqAu4"
+uri = "file://attached_assets/sholat_preview/Maghrib_0_photo-1504711434969-e33886168f5c.jpg"
+type = "image"
+title = "🌅 MAGHRIB - kandidat 1"
+
+[[outputs]]
+id = "WFQ2QyLbfe6juD8b-5VID"
+uri = "file://attached_assets/sholat_preview/Maghrib_1_photo-1528360983277-13d401cdc186.jpg"
+type = "image"
+title = "🌅 MAGHRIB - kandidat 2"
+
+[[outputs]]
+id = "GcTkdmg3ZnKYAOOJPTC_R"
+uri = "file://attached_assets/sholat_preview/Maghrib_2_photo-1476984251899-8d7fdfc5c92c.jpg"
+type = "image"
+title = "🌅 MAGHRIB - kandidat 3"
+
+[[outputs]]
+id = "SVYrb_pmf_pX7Q9IuarK1"
+uri = "file://attached_assets/sholat_preview/Maghrib_3_photo-1516912481808-3406841bd33c.jpg"
+type = "image"
+title = "🌅 MAGHRIB - kandidat 4"
+
+[[outputs]]
+id = "5zXTU9fz_TRosv0ted7dh"
+uri = "file://attached_assets/sholat_preview/Isya_0_photo-1536599018102-9f803c140fc1.jpg"
+type = "image"
+title = "🌙 ISYA - kandidat 1"
+
+[[outputs]]
+id = "tD5Zs42dGjwdfWT8Mj_kV"
+uri = "file://attached_assets/sholat_preview/Isya_1_photo-1543269865-cbf427effbad.jpg"
+type = "image"
+title = "🌙 ISYA - kandidat 2"
+
+[[outputs]]
+id = "MD1c62QEJIwiDRKDZfsBs"
+uri = "file://attached_assets/sholat_preview/Isya_2_photo-1523978591478-c753949ff840.jpg"
+type = "image"
+title = "🌙 ISYA - kandidat 3"
+
+[[outputs]]
+id = "i6_3S7Hl3b_s3mD_FT2sS"
+uri = "file://attached_assets/preview_overlay_subuh.jpg"
+type = "image"
+title = "Preview Subuh — overlay + wa.me owner"
+
+[[outputs]]
+id = "jneClIrHTaLKte9uWEs2p"
+uri = "file://attached_assets/preview_overlay_maghrib.jpg"
+type = "image"
+title = "Preview Maghrib — overlay + wa.me owner"
+
+[[outputs]]
+id = "_9RkOLvo8pjfJrqvSisxP"
+uri = "file://attached_assets/preview_overlay_isya.jpg"
+type = "image"
+title = "Preview Isya — overlay + wa.me owner"
+
+[[outputs]]
+id = "cb-SGCiexF00sQ0W-WtxW"
+uri = "file://img/sholat/subuh.jpg"
+type = "image"
+title = "Subuh"
+
+[[outputs]]
+id = "AjVoc1MKDqeijXHDbRn_o"
+uri = "file://img/sholat/zuhur.jpg"
+type = "image"
+title = "Zuhur"
+
+[[outputs]]
+id = "ijL2u6QpsLKnsWjD2K6jT"
+uri = "file://img/sholat/ashar.jpg"
+type = "image"
+title = "Ashar"
+
+[[outputs]]
+id = "9Rjg34H3hfOPkfxo9QvYs"
+uri = "file://img/sholat/maghrib.jpg"
+type = "image"
+title = "Maghrib"
+
+[[outputs]]
+id = "DudqX81ro2KHLHiBiUrrN"
+uri = "file://img/sholat/isya.jpg"
+type = "image"
+title = "Isya"

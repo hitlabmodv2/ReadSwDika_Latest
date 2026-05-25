@@ -1,3 +1,23 @@
+/**
+ * ───────────────────────────────
+ *  Base Script : Bang Dika Ardnt
+ *  Recode By   : Bang Wilykun
+ *  WhatsApp    : 6289688206739
+ *  Telegram    : @Wilykun1994
+ * ───────────────────────────────
+ *  Script ini khusus donasi/VIP
+ *  Support dari kalian bikin saya
+ *  makin semangat update fitur,
+ *  fix bug, dan rawat script ini.
+ *
+ *  Dilarang menjual ulang script ini
+ *  Tanpa izin resmi dari developer.
+ *  Jika ketahuan = NO UPDATE / NO FIX
+ *
+ *  Hargai karya, gunakan dengan bijak.
+ *  Terima kasih sudah support.
+ * ───────────────────────────────
+ */
 'use strict';
 
 const axios = require('axios');
@@ -124,7 +144,11 @@ function parseDetail(md) {
         const raw = synM[1].trim();
         // Potong di baris yang ada icon notice (✴, !, gambar)
         const cutIdx = raw.search(/\n\s*(?:✴|!|#+\s)/);
-        sinopsis = (cutIdx > 0 ? raw.slice(0, cutIdx) : raw).replace(/\n/g, ' ').trim();
+        sinopsis = (cutIdx > 0 ? raw.slice(0, cutIdx) : raw)
+            .replace(/\r\n/g, '\n')           // normalkan CRLF
+            .replace(/\n{3,}/g, '\n\n')        // 3+ newline → 2 (satu baris kosong)
+            .replace(/([^\n])\n([^\n])/g, '$1 $2') // newline tunggal dalam paragraf → spasi
+            .trim();
     }
 
     // Ambil genre hanya dari konten post, sebelum sidebar genre list

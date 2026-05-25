@@ -617,6 +617,11 @@ export function toggleAntiPorn(groupId, enable) {
     return config;
 }
 
+export function getAllAntiPornGroups() {
+    const config = loadConfig();
+    return Array.isArray(config.antiPorn?.groups) ? [...config.antiPorn.groups] : [];
+}
+
 export function resetAntiPornWarnings(groupId, userJid) {
     const data = loadData();
     if (!data.warnings[groupId]) return;

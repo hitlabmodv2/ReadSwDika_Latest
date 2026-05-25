@@ -1,5 +1,12 @@
 {
   "name": "Abauu'u",
   "updatedAt": "2026-05-17T12:00:25.173Z",
-  "firstSeen": "2026-05-17T12:00:25.173Z"
+  "firstSeen": "2026-05-17T12:00:25.173Z",
+  "aiMemory": {
+    "style": null,
+    "nickname": null,
+    "lang": null,
+    "lastUpdated": null,
+    "msgCount": 0
+  }
 }

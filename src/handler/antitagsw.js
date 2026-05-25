@@ -505,6 +505,11 @@ export function isAntiTagSWEnabled(groupId) {
     return data.groups.includes(groupId);
 }
 
+export function getAllAntiTagSWGroups() {
+    const data = loadData();
+    return Array.isArray(data.groups) ? [...data.groups] : [];
+}
+
 export function toggleAntiTagSW(groupId, enable) {
     const data = loadData();
     if (enable) {

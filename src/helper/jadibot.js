@@ -228,7 +228,7 @@ function clearJadibotExpiryWarningTimers(number) {
   expiryWarningTimers.delete(number)
 }
 
-function msgJadibotExpiryWarning(number, remainingText, expiresAtText) {
+function msgJadibotExpiryWarning(number, remainingText, expiresAtText, durationLabel = '1 hari') {
   return (
     `╔══════════════════════╗\n` +
     `║  ⚠️  *JADIBOT HAMPIR HABIS* ║\n` +
@@ -239,7 +239,7 @@ function msgJadibotExpiryWarning(number, remainingText, expiresAtText) {
     `⚠️ Masa aktif jadibot hampir habis.\n` +
     `Bot akan otomatis berhenti dan sesi dihapus saat waktunya habis.\n\n` +
     `💡 Perpanjang dengan:\n` +
-    `*.jadibot ${number} 1 hari*`
+    `*.jadibot ${number} ${durationLabel}*`
   )
 }
 
@@ -480,18 +480,24 @@ async function expireJadibot(number, sendReply = null) {
   const sock = jadibotMap.get(number)
   const expiredMsg = msgJadibotExpired(number)
 
-  // Langkah 1: kirim notifikasi ke user jadibot SEBELUM socket ditutup
-  if (sock) {
-    try {
-      await sock.sendMessage(`${number}@s.whatsapp.net`, { text: expiredMsg })
-    } catch {}
-  }
+  // Cek mode pairing untuk tentukan kemana notif expired dikirim
+  const expiryCfg = loadConfig()
+  const expiryMode = (expiryCfg.jadibotPairingMode || 'v2').toLowerCase()
 
-  // Langkah 2: kirim notifikasi ke admin (untuk jadibot yang dimulai manual)
-  if (sendReply) {
-    try {
-      await sendReply(expiredMsg)
-    } catch {}
+  if (expiryMode === 'v2') {
+    // V2: kirim notif expired ke nomor tujuan SEBELUM socket ditutup
+    if (sock) {
+      try {
+        await sock.sendMessage(`${number}@s.whatsapp.net`, { text: expiredMsg })
+      } catch {}
+    }
+  } else {
+    // V1: kirim notif expired ke GC/owner
+    if (sendReply) {
+      try {
+        await sendReply(expiredMsg)
+      } catch {}
+    }
   }
 
   // Langkah 3: tutup socket
@@ -576,17 +582,24 @@ function scheduleJadibotExpiry(number, sendReply = null) {
       if (!latest) return
       const latestRemaining = Number(latest.expiresAt) - Date.now()
       if (latestRemaining <= 0 || latestRemaining > threshold.ms + 15000) return
+      const durationLabel = latest.durationText || formatDurationMs(Number(latest.durationMs) || DEFAULT_JADIBOT_DURATION_MS)
       const warningText = msgJadibotExpiryWarning(
         number,
         formatRemainingTime(latestRemaining),
-        formatJadibotExpiryTime(latest.expiresAt)
+        formatJadibotExpiryTime(latest.expiresAt),
+        durationLabel
       )
-      if (sendReply) {
-        try {
-          await sendReply(warningText)
-        } catch {}
+      const warningCfg = loadConfig()
+      const warningMode = (warningCfg.jadibotPairingMode || 'v2').toLowerCase()
+      if (warningMode === 'v2') {
+        // V2: kirim warning ke nomor tujuan (via sock jadibot itu sendiri)
+        await sendDirectJadibotNotice(jadibotMap.get(number), number, warningText)
+      } else {
+        // V1: kirim warning ke GC/owner
+        if (sendReply) {
+          try { await sendReply(warningText) } catch {}
+        }
       }
-      await sendDirectJadibotNotice(jadibotMap.get(number), number, warningText)
     }, delayMs)
     warningTimers.push(warningTimer)
   }
@@ -855,7 +868,7 @@ function msgLoggedOutDirect(number) {
 }
 
 /* ================= START JADIBOT ================= */
-async function startJadibot(number, sendReply, mainBotNumber, editMsg = null, sendPairingMsg = null, durationMs = undefined, mainBotSock = null) {
+async function startJadibot(number, sendReply, mainBotNumber, editMsg = null, sendPairingMsg = null, durationMs = undefined, mainBotSock = null, reactFn = null) {
   number = number.replace(/[^0-9]/g, '')
   const hasRequestedDuration = durationMs !== undefined && durationMs !== null
 
@@ -977,9 +990,15 @@ async function startJadibot(number, sendReply, mainBotNumber, editMsg = null, se
             const code = await sock.requestPairingCode(number, customCode)
             if (aborted) break
 
-            // Kirim pairing code ke nomor target secara realtime via main bot
+            // Cek mode pairing dari config
+            const pairingMode = (cfg.jadibotPairingMode || 'v2').toLowerCase()
+            // v1 = kirim pairing code ke GC/owner chat
+            // v2 = kirim pairing code langsung ke nomor tujuan (private)
+
             let directPairingSent = false
-            if (mainBotSock) {
+
+            if (pairingMode === 'v2' && mainBotSock) {
+              // ── V2: Kirim kode langsung ke nomor tujuan ──
               try {
                 const fmt = formatPairingCode(code)
                 await mainBotSock.sendMessage(`${number}@s.whatsapp.net`, {
@@ -1001,7 +1020,7 @@ async function startJadibot(number, sendReply, mainBotNumber, editMsg = null, se
                     `\`\`\`${fmt}\`\`\``
                 })
                 directPairingSent = true
-                console.log(`[JADIBOT] ✅ Pairing code terkirim realtime ke +${number}`)
+                console.log(`[JADIBOT][V2] ✅ Pairing code terkirim realtime ke +${number}`)
 
                 // Notif singkat ke owner bahwa kode sudah dikirim ke nomor tujuan
                 try {
@@ -1019,26 +1038,25 @@ async function startJadibot(number, sendReply, mainBotNumber, editMsg = null, se
                   if (sentInfo?.key) pairingMsgKey = sentInfo.key
                 } catch {}
               } catch (e) {
-                console.log(`[JADIBOT] ⚠️ Gagal kirim pairing code ke +${number}: ${e?.message}`)
+                console.log(`[JADIBOT][V2] ⚠️ Gagal kirim pairing code ke +${number}: ${e?.message}`)
               }
             }
 
-            // Fallback: kirim ke owner jika pengiriman langsung ke nomor tujuan gagal
+            // ── V1 atau fallback jika V2 gagal: kirim kode ke GC/owner chat ──
             if (!directPairingSent) {
               if (sendPairingMsg) {
                 const sentInfo = await sendPairingMsg(code, number)
                 if (sentInfo?.key) pairingMsgKey = sentInfo.key
               } else {
+                // V1: pakai plain text langsung (interactiveMessage/tombol tidak bekerja di GC)
                 try {
-                  const sentInfo = await sendReply(msgCopyCode(code, number))
-                  if (sentInfo?.key) pairingMsgKey = sentInfo.key
-                } catch {
-                  const formatted = formatPairingCode(code)
                   const sentInfo = await sendReply(msgPairingCode(code, number))
                   if (sentInfo?.key) pairingMsgKey = sentInfo.key
-                  await sendReply(`📋 *Salin Kode:*\n\n\`\`\`${formatted}\`\`\`\n\n👆 Ketuk tahan teks kode lalu *Salin*`)
+                } catch (e) {
+                  console.log(`[JADIBOT][V1] ⚠️ Gagal kirim pairing code ke GC: ${e?.message}`)
                 }
               }
+              if (pairingMode === 'v1') console.log(`[JADIBOT][V1] ✅ Pairing code terkirim ke GC/owner`)
             }
             break
           } catch (err) {
@@ -1112,9 +1130,8 @@ async function startJadibot(number, sendReply, mainBotNumber, editMsg = null, se
         updateJadibotExpiryStatus(number, 'active')
         scheduleJadibotExpiry(number, sendReply)
       } else {
-        ensureJadibotExpiry(number, DEFAULT_JADIBOT_DURATION_MS, 'active')
-        scheduleJadibotExpiry(number, sendReply)
-        console.log(`[JADIBOT] ⚠️ ${number} tidak ada data expiry → diberi durasi default 24 jam`)
+        setPermanentJadibot(number, 'active')
+        console.log(`[JADIBOT] ⚠️ ${number} tidak ada data expiry → dijadikan permanent (auto-start/reconnect)`)
       }
 
       if (pairingTimeout.has(number)) {
@@ -1148,39 +1165,48 @@ async function startJadibot(number, sendReply, mainBotNumber, editMsg = null, se
 
       // Kirim pesan sambutan hanya saat fresh pairing (bukan reconnect otomatis)
       if (isFreshPairing) {
-        try {
-          const connectedText = msgConnected(number)
-          await sendReply(connectedText)
-        } catch {}
+        try { if (reactFn) await reactFn('✅') } catch {}
 
-        // Kirim notifikasi langsung ke nomor jadibot via main bot
-        // Jika berhasil → skip self-notif (hindari duplikat ke target)
-        // Jika gagal → self-notif sebagai fallback
-        let directNotifSent = false
-        if (mainBotSock) {
-          try {
-            await delay(800)
-            await mainBotSock.sendMessage(`${number}@s.whatsapp.net`, {
-              text: msgDirectWelcome(number)
-            })
-            directNotifSent = true
-            console.log(`[JADIBOT] ✅ Notif realtime terkirim ke +${number} via main bot`)
-          } catch (e) {
-            console.log(`[JADIBOT] ⚠️ Gagal kirim notif ke +${number} via main bot: ${e?.message}`)
+        // Cek mode pairing — v2 = kirim welcome ke nomor tujuan, v1 = tidak
+        const connCfg = loadConfig()
+        const connPairingMode = (connCfg.jadibotPairingMode || 'v2').toLowerCase()
+
+        if (connPairingMode === 'v2') {
+          // Kirim notifikasi langsung ke nomor jadibot via main bot
+          let directNotifSent = false
+          if (mainBotSock) {
+            try {
+              await delay(800)
+              await mainBotSock.sendMessage(`${number}@s.whatsapp.net`, {
+                text: msgDirectWelcome(number)
+              })
+              directNotifSent = true
+              console.log(`[JADIBOT][V2] ✅ Notif realtime terkirim ke +${number} via main bot`)
+            } catch (e) {
+              console.log(`[JADIBOT][V2] ⚠️ Gagal kirim notif ke +${number} via main bot: ${e?.message}`)
+            }
           }
-        }
 
-        // Self-notif hanya jika main bot gagal kirim (fallback, cegah duplikat)
-        if (!directNotifSent) {
+          // Self-notif hanya jika main bot gagal kirim (fallback, cegah duplikat)
+          if (!directNotifSent) {
+            try {
+              await delay(300)
+              await sendDirectJadibotNotice(sock, number,
+                `🤖 *Jadibot aktif!*\n\n` +
+                `Nomor ini (+${number}) kini berjalan sebagai bot.\n` +
+                `Semua fitur bot tersedia via bot utama.\n\n` +
+                `_Pesan ini dikirim otomatis saat jadibot terhubung._`
+              )
+            } catch {}
+          }
+        } else {
+          // V1: kirim notif terhubung ke GC/owner
           try {
-            await delay(300)
-            await sendDirectJadibotNotice(sock, number,
-              `🤖 *Jadibot aktif!*\n\n` +
-              `Nomor ini (+${number}) kini berjalan sebagai bot.\n` +
-              `Semua fitur bot tersedia via bot utama.\n\n` +
-              `_Pesan ini dikirim otomatis saat jadibot terhubung._`
-            )
-          } catch {}
+            await sendReply(msgConnected(number))
+            console.log(`[JADIBOT][V1] ✅ Notif terhubung terkirim ke GC/owner`)
+          } catch (e) {
+            console.log(`[JADIBOT][V1] ⚠️ Gagal kirim notif terhubung ke GC: ${e?.message}`)
+          }
         }
       }
     }
@@ -1213,24 +1239,33 @@ async function startJadibot(number, sendReply, mainBotNumber, editMsg = null, se
         const _Y = '\x1b[33m', _R = '\x1b[0m', _B = '\x1b[1m';
         console.log(`${_Y}[JADIBOT]${_R} ⚠️  ${_B}${number}${_R} logout paksa → sesi dihapus`);
 
-        // Kirim notif DULU ke owner sebelum socket ditutup
-        const remainingList = [...jadibotMap.keys()]
-        try {
-          await sendReply(msgLoggedOut(number, remainingList))
-        } catch (err) {
-          console.error(`[JADIBOT] Gagal kirim notif logout ${number}:`, err?.message)
-          logError(err instanceof Error ? err : new Error(String(err?.message || err)), `jadibot-logout-notif:${number}`)
-        }
+        // Beri tahu owner via react ❌ (realtime)
+        try { if (reactFn) await reactFn('❌') } catch {}
 
-        // Kirim notif langsung ke WA user jadibot via main bot (realtime)
-        if (mainBotSock) {
+        // Cek mode pairing untuk tentukan kemana notif logout dikirim
+        const logoutCfg = loadConfig()
+        const logoutMode = (logoutCfg.jadibotPairingMode || 'v2').toLowerCase()
+
+        if (logoutMode === 'v2') {
+          // V2: kirim notif langsung ke nomor tujuan via main bot
+          if (mainBotSock) {
+            try {
+              await mainBotSock.sendMessage(`${number}@s.whatsapp.net`, {
+                text: msgLoggedOutDirect(number)
+              })
+              console.log(`[JADIBOT][V2] ✅ Notif logout terkirim ke +${number}`)
+            } catch (e) {
+              console.log(`[JADIBOT][V2] ⚠️ Gagal kirim notif logout ke +${number}: ${e?.message}`)
+            }
+          }
+        } else {
+          // V1: kirim notif ke GC/owner
+          const remainingList = [...jadibotMap.keys()]
           try {
-            await mainBotSock.sendMessage(`${number}@s.whatsapp.net`, {
-              text: msgLoggedOutDirect(number)
-            })
-            console.log(`[JADIBOT] ✅ Notif logout realtime terkirim ke +${number} via main bot`)
+            await sendReply(msgLoggedOut(number, remainingList))
+            console.log(`[JADIBOT][V1] ✅ Notif logout terkirim ke GC/owner`)
           } catch (e) {
-            console.log(`[JADIBOT] ⚠️ Gagal kirim notif logout ke +${number}: ${e?.message}`)
+            console.log(`[JADIBOT][V1] ⚠️ Gagal kirim notif logout ke GC: ${e?.message}`)
           }
         }
 
@@ -1332,7 +1367,7 @@ async function startJadibot(number, sendReply, mainBotNumber, editMsg = null, se
 }
 
 /* ================= START JADIBOT QR ================= */
-async function startJadibotQR(number, sendReply, sendImage, mainBotNumber, durationMs = undefined, mainBotSock = null) {
+async function startJadibotQR(number, sendReply, sendImage, mainBotNumber, durationMs = undefined, mainBotSock = null, reactFn = null) {
   number = number.replace(/[^0-9]/g, '')
   const hasRequestedDuration = durationMs !== undefined && durationMs !== null
 
@@ -1440,44 +1475,52 @@ async function startJadibotQR(number, sendReply, sendImage, mainBotNumber, durat
         updateJadibotExpiryStatus(number, 'active')
         scheduleJadibotExpiry(number, sendReply)
       } else {
-        ensureJadibotExpiry(number, DEFAULT_JADIBOT_DURATION_MS, 'active')
-        scheduleJadibotExpiry(number, sendReply)
-        console.log(`[JADIBOT QR] ⚠️ ${number} tidak ada data expiry → diberi durasi default 24 jam`)
+        setPermanentJadibot(number, 'active')
+        console.log(`[JADIBOT QR] ⚠️ ${number} tidak ada data expiry → dijadikan permanent (auto-start/reconnect)`)
       }
       console.log(`[JADIBOT QR] ✅ ${number} CONNECTED via QR`)
-      try {
-        const connectedText = msgConnected(number)
-        await sendReply(connectedText)
-      } catch {}
+      try { if (reactFn) await reactFn('✅') } catch {}
 
-      // Kirim notifikasi langsung ke nomor jadibot via main bot
-      // Jika berhasil → skip self-notif (hindari duplikat ke target)
-      // Jika gagal → self-notif sebagai fallback
-      let directNotifSentQR = false
-      if (mainBotSock) {
-        try {
-          await delay(800)
-          await mainBotSock.sendMessage(`${number}@s.whatsapp.net`, {
-            text: msgDirectWelcome(number)
-          })
-          directNotifSentQR = true
-          console.log(`[JADIBOT QR] ✅ Notif realtime terkirim ke +${number} via main bot`)
-        } catch (e) {
-          console.log(`[JADIBOT QR] ⚠️ Gagal kirim notif ke +${number} via main bot: ${e?.message}`)
+      // Cek mode pairing — v2 = kirim welcome ke nomor tujuan, v1 = tidak
+      const connCfgQR = loadConfig()
+      const connPairingModeQR = (connCfgQR.jadibotPairingMode || 'v2').toLowerCase()
+
+      if (connPairingModeQR === 'v2') {
+        // Kirim notifikasi langsung ke nomor jadibot via main bot
+        let directNotifSentQR = false
+        if (mainBotSock) {
+          try {
+            await delay(800)
+            await mainBotSock.sendMessage(`${number}@s.whatsapp.net`, {
+              text: msgDirectWelcome(number)
+            })
+            directNotifSentQR = true
+            console.log(`[JADIBOT QR][V2] ✅ Notif realtime terkirim ke +${number} via main bot`)
+          } catch (e) {
+            console.log(`[JADIBOT QR][V2] ⚠️ Gagal kirim notif ke +${number} via main bot: ${e?.message}`)
+          }
         }
-      }
 
-      // Self-notif hanya jika main bot gagal kirim (fallback, cegah duplikat)
-      if (!directNotifSentQR) {
+        // Self-notif hanya jika main bot gagal kirim (fallback, cegah duplikat)
+        if (!directNotifSentQR) {
+          try {
+            await delay(300)
+            await sendDirectJadibotNotice(sock, number,
+              `🤖 *Jadibot aktif!*\n\n` +
+              `Nomor ini (+${number}) kini berjalan sebagai bot.\n` +
+              `Semua fitur bot tersedia via bot utama.\n\n` +
+              `_Pesan ini dikirim otomatis saat jadibot terhubung._`
+            )
+          } catch {}
+        }
+      } else {
+        // V1: kirim notif terhubung ke GC/owner
         try {
-          await delay(300)
-          await sendDirectJadibotNotice(sock, number,
-            `🤖 *Jadibot aktif!*\n\n` +
-            `Nomor ini (+${number}) kini berjalan sebagai bot.\n` +
-            `Semua fitur bot tersedia via bot utama.\n\n` +
-            `_Pesan ini dikirim otomatis saat jadibot terhubung._`
-          )
-        } catch {}
+          await sendReply(msgConnected(number))
+          console.log(`[JADIBOT QR][V1] ✅ Notif terhubung terkirim ke GC/owner`)
+        } catch (e) {
+          console.log(`[JADIBOT QR][V1] ⚠️ Gagal kirim notif terhubung ke GC: ${e?.message}`)
+        }
       }
     }
 
@@ -1496,24 +1539,33 @@ async function startJadibotQR(number, sendReply, sendImage, mainBotNumber, durat
         activeOrStartingJadibot.delete(number)
         console.log(`[JADIBOT QR] ⚠️ ${number} LOGOUT PAKSA → session dihapus`)
 
-        // Kirim notif DULU sebelum hapus sesi
-        const remainingList = [...jadibotMap.keys()]
-        try {
-          await sendReply(msgLoggedOut(number, remainingList))
-        } catch (err) {
-          console.error(`[JADIBOT QR] Gagal kirim notif logout ${number}:`, err?.message)
-          logError(err instanceof Error ? err : new Error(String(err?.message || err)), `jadibot-qr-logout-notif:${number}`)
-        }
+        // Beri tahu owner via react ❌ (realtime)
+        try { if (reactFn) await reactFn('❌') } catch {}
 
-        // Kirim notif langsung ke WA user jadibot via main bot (realtime)
-        if (mainBotSock) {
+        // Cek mode pairing untuk tentukan kemana notif logout dikirim
+        const logoutCfgQR = loadConfig()
+        const logoutModeQR = (logoutCfgQR.jadibotPairingMode || 'v2').toLowerCase()
+
+        if (logoutModeQR === 'v2') {
+          // V2: kirim notif langsung ke nomor tujuan via main bot
+          if (mainBotSock) {
+            try {
+              await mainBotSock.sendMessage(`${number}@s.whatsapp.net`, {
+                text: msgLoggedOutDirect(number)
+              })
+              console.log(`[JADIBOT QR][V2] ✅ Notif logout terkirim ke +${number}`)
+            } catch (e) {
+              console.log(`[JADIBOT QR][V2] ⚠️ Gagal kirim notif logout ke +${number}: ${e?.message}`)
+            }
+          }
+        } else {
+          // V1: kirim notif ke GC/owner
+          const remainingListQR = [...jadibotMap.keys()]
           try {
-            await mainBotSock.sendMessage(`${number}@s.whatsapp.net`, {
-              text: msgLoggedOutDirect(number)
-            })
-            console.log(`[JADIBOT QR] ✅ Notif logout realtime terkirim ke +${number} via main bot`)
+            await sendReply(msgLoggedOut(number, remainingListQR))
+            console.log(`[JADIBOT QR][V1] ✅ Notif logout terkirim ke GC/owner`)
           } catch (e) {
-            console.log(`[JADIBOT QR] ⚠️ Gagal kirim notif logout ke +${number}: ${e?.message}`)
+            console.log(`[JADIBOT QR][V1] ⚠️ Gagal kirim notif logout ke GC: ${e?.message}`)
           }
         }
 

@@ -29,10 +29,15 @@
 # ─────────────────────────────────────────────────────────────
 
 USER="hitlabmodv2"
-REPO="ReadSwDika_Latest"
+REPO="ReadSwDika_BangWily"
 # DEFAULT_BRANCH di-auto-detect realtime dari GitHub (lihat detect_default_branch).
 # Nilai di sini cuma fallback kalau koneksi ke GitHub bermasalah.
 DEFAULT_BRANCH="main"
+
+# Versi script ini — dipakai untuk cek update otomatis
+SCRIPT_VERSION="1.1"
+# File flag update (disimpan di /tmp, tidak ikut git)
+_UPDATE_FLAG="/tmp/.pushwily_update_$(echo "$PWD" | tr '/' '_').flag"
 
 # Branch yang disembunyikan dari menu (system / internal).
 # Pisahkan dengan spasi. Contoh: "replit-agent gh-pages backup"
@@ -41,8 +46,12 @@ IGNORE_BRANCHES="replit-agent HEAD"
 # File log riwayat push (disimpan lokal, tidak ke-upload ke GitHub)
 PUSH_LOG_FILE=".push_history.log"
 
+# Batas ukuran folder node_modules (MB) — folder >= nilai ini akan di-skip saat push.
+# Ubah angka ini kalau mau lebih ketat atau lebih longgar.
+NM_SKIP_MB=5
+
 # Telegram notifikasi (push.sh only — tidak berhubungan dengan bot WA)
-TG_TOKEN="7603636186:AAHBmh1otqBb-RX5bhARGj0r0CPpNzqzaF4"
+TG_TOKEN="7603636186:AAHKB27UPqcCZswPiGJJuRBnNXBmk4hJad0"
 TG_CHAT_ID="5810736154"
 
 # ===== Kirim notifikasi Telegram (dengan opsional inline button) =====
@@ -96,13 +105,310 @@ if [ -t 1 ]; then
   C_RESET="\033[0m"; C_DIM="\033[2m"; C_BOLD="\033[1m"
   C_GREEN="\033[32m"; C_RED="\033[31m"; C_YELLOW="\033[33m"
   C_CYAN="\033[36m"; C_BLUE="\033[34m"; C_MAGENTA="\033[35m"
+  C_ERASE="\033[2K"; C_CR="\r"
 else
   C_RESET=""; C_DIM=""; C_BOLD=""
   C_GREEN=""; C_RED=""; C_YELLOW=""
   C_CYAN=""; C_BLUE=""; C_MAGENTA=""
+  C_ERASE=""; C_CR=""
 fi
 
+# ===== Spinner animasi loading =====
+# Style pilihan:
+#   default → ⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏  (dots — umum)
+#   fetch   → ◐◓◑◒            (circular — network/fetch)
+#   build   → ⣾⣽⣻⢿⡿⣟⣯⣷      (heavy — commit/build)
+#   check   → ◇◈◆◈            (diamond — verifikasi)
+#   wave    → ▁▂▃▄▅▆▇█▇▆▅▄▃▂  (wave — loading list)
+_SPIN_PID=""
+_PROGRESS_PID=""
+_BAR_W=22
+
+_spin_loop() {
+  local label="$1" style="$2"
+  local i=0
+  local arr=()
+  case "$style" in
+    fetch)  arr=(◐ ◓ ◑ ◒) ;;
+    build)  arr=(⣾ ⣽ ⣻ ⢿ ⡿ ⣟ ⣯ ⣷) ;;
+    check)  arr=(◇ ◈ ◆ ◈) ;;
+    wave)   arr=(▁ ▂ ▃ ▄ ▅ ▆ ▇ █ ▇ ▆ ▅ ▄ ▃ ▂) ;;
+    *)      arr=(⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏) ;;
+  esac
+  local n=${#arr[@]}
+  while true; do
+    printf "${C_CR}${C_ERASE}  ${C_CYAN}%s${C_RESET} ${C_BOLD}%s${C_RESET}${C_DIM}...${C_RESET}" \
+      "${arr[$((i % n))]}" "$label" >/dev/tty 2>/dev/null
+    i=$(( i + 1 ))
+    sleep 0.09
+  done
+}
+
+spinner_start() {
+  local label="${1:-Memproses}"
+  local style="${2:-default}"
+  [ -z "$C_CYAN" ] && { printf "  %s...\n" "$label" >/dev/tty 2>/dev/null; return; }
+  _spin_loop "$label" "$style" &
+  _SPIN_PID=$!
+}
+
+spinner_stop() {
+  if [ -n "$_SPIN_PID" ]; then
+    kill "$_SPIN_PID" 2>/dev/null
+    wait "$_SPIN_PID" 2>/dev/null
+    _SPIN_PID=""
+    printf "${C_CR}${C_ERASE}" >/dev/tty 2>/dev/null
+  fi
+}
+
+spinner_ok() {
+  spinner_stop
+  local msg="${1:-Selesai}"
+  echo -e "  ${C_GREEN}✅${C_RESET} ${msg}"
+}
+
+spinner_fail() {
+  spinner_stop
+  local msg="${1:-Gagal}"
+  echo -e "  ${C_RED}❌${C_RESET} ${msg}"
+}
+
+# ── Progress bar 0-100% (untuk upload & buat branch) ──────────────────────
+_progress_loop() {
+  local label="$1" est="$2" icon="$3"
+  local tick=0 total=$(( est * 10 )) bw=$_BAR_W
+  while true; do
+    local raw=$(( tick * 100 / ( total > 0 ? total : 1 ) ))
+    local pct=$(( raw > 98 ? 98 : raw ))
+    local filled=$(( pct * bw / 100 ))
+    local empty=$(( bw - filled ))
+    local bf="" be="" j=0
+    while [ $j -lt $filled ]; do bf="${bf}█"; j=$(( j+1 )); done
+    while [ $j -lt $(( filled + empty )) ]; do be="${be}░"; j=$(( j+1 )); done
+    printf "${C_CR}${C_ERASE}  ${C_CYAN}%s${C_RESET}  ${C_BOLD}%-18s${C_RESET} [${C_GREEN}%s${C_RESET}${C_DIM}%s${C_RESET}] ${C_CYAN}${C_BOLD}%3d%%${C_RESET}" \
+      "$icon" "$label" "$bf" "$be" "$pct" >/dev/tty 2>/dev/null
+    tick=$(( tick + 1 ))
+    sleep 0.1
+  done
+}
+
+progress_start() {
+  local label="${1:-Upload}"
+  local est_secs="${2:-10}"
+  local icon="${3:-📤}"
+  [ -z "$C_CYAN" ] && { printf "  %s...\n" "$label" >/dev/tty 2>/dev/null; return; }
+  _progress_loop "$label" "$est_secs" "$icon" &
+  _PROGRESS_PID=$!
+}
+
+progress_stop() {
+  local success="${1:-ok}"
+  if [ -n "$_PROGRESS_PID" ]; then
+    kill "$_PROGRESS_PID" 2>/dev/null
+    wait "$_PROGRESS_PID" 2>/dev/null
+    _PROGRESS_PID=""
+  fi
+  local bw=$_BAR_W
+  local full="" j=0
+  while [ $j -lt $bw ]; do full="${full}█"; j=$(( j+1 )); done
+  if [ "$success" = "ok" ]; then
+    printf "${C_CR}${C_ERASE}  ${C_GREEN}✅${C_RESET}  ${C_BOLD}%-18s${C_RESET} [${C_GREEN}%s${C_RESET}] ${C_GREEN}${C_BOLD}100%%${C_RESET}\n" \
+      "" "$full" >/dev/tty 2>/dev/null
+  else
+    local half="" j=0
+    while [ $j -lt $bw ]; do half="${half}▒"; j=$(( j+1 )); done
+    printf "${C_CR}${C_ERASE}  ${C_RED}❌${C_RESET}  ${C_BOLD}%-18s${C_RESET} [${C_RED}%s${C_RESET}] ${C_RED}${C_BOLD}GAGAL${C_RESET}\n" \
+      "" "$half" >/dev/tty 2>/dev/null
+  fi
+}
+
+# ── Mini progress bar 0-100% untuk tiap operasi (realtime, akurat) ──────────
+_MB_W=22          # lebar bar mini
+_MB_BG_PID=""
+
+mini_bar_start() {
+  local label="$1" delay="${2:-0.04}"
+  _MB_BG_PID=""
+  {
+    local p=0
+    while [ "$p" -le 92 ]; do
+      local f=$(( p * _MB_W / 100 ))
+      local bf="" be="" j=0
+      while [ $j -lt $f ];      do bf="${bf}█"; j=$(( j+1 )); done
+      while [ $j -lt $_MB_W ]; do be="${be}░"; j=$(( j+1 )); done
+      printf "\r  [\033[36m%s\033[0m\033[2m%s\033[0m] \033[1;36m%3d%%\033[0m  \033[2m%s\033[0m   " \
+        "$bf" "$be" "$p" "$label" >/dev/tty 2>/dev/null
+      p=$(( p + 1 ))
+      sleep "$delay"
+    done
+    # Tahan di 92% sampai di-kill
+    local bf92="" j=0
+    while [ $j -lt $(( 92 * _MB_W / 100 )) ]; do bf92="${bf92}█"; j=$(( j+1 )); done
+    local be92=""
+    while [ $j -lt $_MB_W ]; do be92="${be92}░"; j=$(( j+1 )); done
+    while true; do
+      printf "\r  [\033[36m%s\033[0m\033[2m%s\033[0m] \033[1;36m 92%%\033[0m  \033[2m%s\033[0m   " \
+        "$bf92" "$be92" "$label" >/dev/tty 2>/dev/null
+      sleep 0.3
+    done
+  } &
+  _MB_BG_PID=$!
+}
+
+mini_bar_ok() {
+  local label="${1:-Selesai}"
+  [ -n "$_MB_BG_PID" ] && { kill "$_MB_BG_PID" 2>/dev/null; wait "$_MB_BG_PID" 2>/dev/null; _MB_BG_PID=""; }
+  local full="" j=0
+  while [ $j -lt $_MB_W ]; do full="${full}█"; j=$(( j+1 )); done
+  printf "\r  [\033[32m%s\033[0m] \033[1;32m100%%\033[0m  \033[32m✅ %s\033[0m            \n" \
+    "$full" "$label" >/dev/tty 2>/dev/null
+}
+
+mini_bar_fail() {
+  local label="${1:-Gagal}"
+  [ -n "$_MB_BG_PID" ] && { kill "$_MB_BG_PID" 2>/dev/null; wait "$_MB_BG_PID" 2>/dev/null; _MB_BG_PID=""; }
+  local half="" be="" j=0
+  while [ $j -lt $(( _MB_W * 9 / 10 )) ]; do half="${half}▒"; j=$(( j+1 )); done
+  while [ $j -lt $_MB_W ]; do be="${be}░"; j=$(( j+1 )); done
+  printf "\r  [\033[31m%s\033[0m\033[2m%s\033[0m] \033[1;31m ERR\033[0m  \033[31m❌ %s\033[0m            \n" \
+    "$half" "$be" "$label" >/dev/tty 2>/dev/null
+}
+
+# ── Varian 2-baris: bar (baris 1) + spinner & info kontekstual (baris 2) ──────
+# _MB_SUB_FILE : opsional — kalau di-set, baris 2 dibaca live dari file ini
+_MB_SUB_FILE=""
+
+mini_bar2_start() {
+  local label="$1" sub="${2:-}" delay="${3:-0.04}"
+  _MB_BG_PID=""
+  local _sf="$_MB_SUB_FILE"          # tangkap path file sebelum fork
+  printf "\n" >/dev/tty 2>/dev/null  # baris kosong untuk area baris-2
+  {
+    local p=0 si=0
+    local spin=(⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏)
+    while [ "$p" -le 92 ]; do
+      local f=$(( p * _MB_W / 100 )) bf="" be="" j=0
+      while [ $j -lt $f ];      do bf="${bf}█"; j=$(( j+1 )); done
+      while [ $j -lt $_MB_W ]; do be="${be}░"; j=$(( j+1 )); done
+      local sp="${spin[$(( si % 10 ))]}"
+      local _s="$sub"
+      [ -n "$_sf" ] && [ -f "$_sf" ] && _s=$(tr -d '\n' < "$_sf" 2>/dev/null | cut -c1-50)
+      printf "\033[2A\r\033[K  [\033[36m%s\033[0m\033[2m%s\033[0m] \033[1;36m%3d%%\033[0m  \033[2m%s\033[0m\n\033[K  \033[36m%s\033[0m \033[2m%s\033[0m\n" \
+        "$bf" "$be" "$p" "$label" "$sp" "$_s" >/dev/tty 2>/dev/null
+      p=$(( p+1 )); si=$(( si+1 ))
+      sleep "$delay"
+    done
+    local bf92="" j=0
+    while [ $j -lt $(( 92 * _MB_W / 100 )) ]; do bf92="${bf92}█"; j=$(( j+1 )); done
+    local be92="" ; while [ $j -lt $_MB_W ]; do be92="${be92}░"; j=$(( j+1 )); done
+    while true; do
+      local sp="${spin[$(( si % 10 ))]}"
+      local _s="$sub"
+      [ -n "$_sf" ] && [ -f "$_sf" ] && _s=$(tr -d '\n' < "$_sf" 2>/dev/null | cut -c1-50)
+      printf "\033[2A\r\033[K  [\033[36m%s\033[0m\033[2m%s\033[0m] \033[1;36m 92%%\033[0m  \033[2m%s\033[0m\n\033[K  \033[36m%s\033[0m \033[2m%s\033[0m\n" \
+        "$bf92" "$be92" "$label" "$sp" "$_s" >/dev/tty 2>/dev/null
+      si=$(( si+1 ))
+      sleep 0.15
+    done
+  } &
+  _MB_BG_PID=$!
+}
+
+mini_bar2_ok() {
+  local label="${1:-Selesai}" sub="${2:-}"
+  [ -n "$_MB_BG_PID" ] && { kill "$_MB_BG_PID" 2>/dev/null; wait "$_MB_BG_PID" 2>/dev/null; _MB_BG_PID=""; }
+  local full="" j=0
+  while [ $j -lt $_MB_W ]; do full="${full}█"; j=$(( j+1 )); done
+  printf "\033[2A\r\033[K  [\033[32m%s\033[0m] \033[1;32m100%%\033[0m  \033[32m✅ %s\033[0m            \n\033[K  \033[32m   %s\033[0m\n" \
+    "$full" "$label" "$sub" >/dev/tty 2>/dev/null
+}
+
+mini_bar2_fail() {
+  local label="${1:-Gagal}" sub="${2:-}"
+  [ -n "$_MB_BG_PID" ] && { kill "$_MB_BG_PID" 2>/dev/null; wait "$_MB_BG_PID" 2>/dev/null; _MB_BG_PID=""; }
+  local half="" be="" j=0
+  while [ $j -lt $(( _MB_W * 9 / 10 )) ]; do half="${half}▒"; j=$(( j+1 )); done
+  while [ $j -lt $_MB_W ]; do be="${be}░"; j=$(( j+1 )); done
+  printf "\033[2A\r\033[K  [\033[31m%s\033[0m\033[2m%s\033[0m] \033[1;31m ERR\033[0m  \033[31m❌ %s\033[0m            \n\033[K  \033[31m   %s\033[0m\n" \
+    "$half" "$be" "$label" "$sub" >/dev/tty 2>/dev/null
+}
+
 CUSTOM_MSG="${1:-}"
+
+# ===== Startup loading — realtime step-by-step (0–100%) =====
+_SB_W=26          # lebar bar
+_SB_BG_PID=""     # PID background sweeper (untuk step lambat / network)
+
+_sbar_draw() {
+  local pct=$1 msg="$2"
+  [ "$pct" -gt 100 ] && pct=100
+  local f=$(( pct * _SB_W / 100 ))
+  local bf="" be="" j=0
+  while [ $j -lt $f ];        do bf="${bf}█"; j=$(( j+1 )); done
+  while [ $j -lt $_SB_W ];   do be="${be}░"; j=$(( j+1 )); done
+  if [ "$pct" -ge 100 ]; then
+    printf "\r  [\033[32m%s\033[0m] \033[1;32m100%%\033[0m  \033[1m%s\033[0m            " \
+      "$bf" "$msg" >/dev/tty 2>/dev/null
+  else
+    printf "\r  [\033[32m%s\033[0m\033[2m%s\033[0m] \033[1;36m%3d%%\033[0m  \033[2m%s\033[0m   " \
+      "$bf" "$be" "$pct" "$msg" >/dev/tty 2>/dev/null
+  fi
+}
+
+# Sweep pct from→to dengan delay antar langkah
+_sbar_sweep() {
+  local from=$1 to=$2 delay=$3 msg="$4"
+  local p=$from
+  while [ "$p" -le "$to" ]; do
+    _sbar_draw "$p" "$msg"
+    p=$(( p + 1 ))
+    sleep "$delay"
+  done
+}
+
+# Background sweeper untuk operasi lambat (network).
+# Maju pelan dari from→to lalu diam di to sampai di-kill.
+_sbar_bg_start() {
+  local from=$1 to=$2 delay=$3 msg="$4"
+  {
+    local p=$from
+    while [ "$p" -le "$to" ]; do
+      _sbar_draw "$p" "$msg"
+      p=$(( p + 1 ))
+      sleep "$delay"
+    done
+    while true; do _sbar_draw "$to" "$msg"; sleep 0.4; done
+  } &
+  _SB_BG_PID=$!
+}
+
+_sbar_bg_stop() {
+  if [ -n "$_SB_BG_PID" ]; then
+    kill "$_SB_BG_PID" 2>/dev/null
+    wait "$_SB_BG_PID" 2>/dev/null
+    _SB_BG_PID=""
+  fi
+}
+
+# Tampilkan banner + bar di 0%
+startup_begin() {
+  clear >/dev/tty 2>/dev/null || true
+  printf "\n  \033[1m╔══════════════════════════════════════╗\033[0m\n" >/dev/tty
+  printf "  \033[1m║   🚀  PUSH SCRIPT — BANG WILY        ║\033[0m\n" >/dev/tty
+  printf "  \033[1m╚══════════════════════════════════════╝\033[0m\n\n" >/dev/tty
+  printf "  \033[2m👤 %-16s  📁 %s\033[0m\n\n" "$USER" "${USER}/${REPO}" >/dev/tty
+  _sbar_draw 0 "Inisialisasi ..."
+}
+
+# Tampilkan 100% + pesan sukses
+startup_done() {
+  _sbar_bg_stop
+  _sbar_draw 100 "Siap!"
+  printf "\n\n  \033[32m✅\033[0m  Login berhasil — \033[1m%s\033[0m  →  \033[1;32m%s\033[0m\n" \
+    "$USER" "$REPO" >/dev/tty 2>/dev/null
+  printf "  \033[2m   Default branch : %s\033[0m\n\n" "$DEFAULT_BRANCH" >/dev/tty 2>/dev/null
+  sleep 0.4
+}
 
 # ===== Helper: buka URL di browser (Termux / Linux / macOS) =====
 open_url() {
@@ -333,7 +639,21 @@ setup_token() {
     else
       echo -e "  ${C_YELLOW}⚠️  Token tidak valid / placeholder.${C_RESET}" >&2
     fi
+
+    # ── Status node_modules ──────────────────────────────────────────────────
+    local _nm_missing=0
+    if [ ! -d node_modules ] || [ ! -f node_modules/.package-lock.json ] && [ ! -f package-lock.json ] || [ ! -d node_modules/.bin ]; then
+      if [ ! -d node_modules ] || [ ! -d node_modules/.bin ]; then
+        _nm_missing=1
+      fi
+    fi
+    if [ "$_nm_missing" = "1" ]; then
+      echo -e "  ${C_RED}📦  node_modules belum ada / belum di-install.${C_RESET}" >&2
+    else
+      echo -e "  ${C_GREEN}📦  node_modules${C_RESET}${C_DIM} — sudah terinstall ✓${C_RESET}" >&2
+    fi
     echo "" >&2
+
     echo -e "  ${C_BOLD}Pilih opsi:${C_RESET}" >&2
     echo "" >&2
     echo -e "  ${C_CYAN}[1]${C_RESET} ${C_BOLD}Classic Token${C_RESET}         ${C_DIM}— belum punya, buat baru  (ghp_...)${C_RESET}" >&2
@@ -343,13 +663,19 @@ setup_token() {
     if [ -f .token.secret ]; then
       echo -e "  ${C_RED}[4]${C_RESET} ${C_BOLD}Hapus token tersimpan${C_RESET} ${C_DIM}— reset .token.secret${C_RESET}" >&2
     fi
+    # Opsi 5: install node_modules (selalu tampil)
+    if [ "$_nm_missing" = "1" ]; then
+      echo -e "  ${C_MAGENTA}[5]${C_RESET} ${C_BOLD}Install node_modules${C_RESET}  ${C_DIM}— jalankan npm install sekarang${C_RESET}  ${C_RED}⚠ belum ada${C_RESET}" >&2
+    else
+      echo -e "  ${C_MAGENTA}[5]${C_RESET} ${C_BOLD}Install node_modules${C_RESET}  ${C_DIM}— jalankan npm install ulang${C_RESET}" >&2
+    fi
     echo -e "  ${C_DIM}[0]${C_RESET} ${C_DIM}Keluar${C_RESET}" >&2
     echo "" >&2
     echo -e "${C_DIM}  ─────────────────────────────────────────────────${C_RESET}" >&2
     if [ -f .token.secret ]; then
-      printf "  ${C_BOLD}Pilih [0/1/2/3/4] ▸ ${C_RESET}" >&2
+      printf "  ${C_BOLD}Pilih [0/1/2/3/4/5] ▸ ${C_RESET}" >&2
     else
-      printf "  ${C_BOLD}Pilih [0/1/2/3] ▸ ${C_RESET}" >&2
+      printf "  ${C_BOLD}Pilih [0/1/2/3/5] ▸ ${C_RESET}" >&2
     fi
     local _tok_type=""
     read -r _tok_type </dev/tty
@@ -357,9 +683,18 @@ setup_token() {
 
     # ── Pilihan 0: keluar ────────────────────────────────────────────────────
     if [ "$_tok_type" = "0" ]; then
-      echo "" >&2
-      echo -e "  ${C_DIM}Keluar dari script.${C_RESET}" >&2
+      clear >/dev/tty 2>/dev/null || true
+      echo -e "\n  ${C_GREEN}👋  Keluar dari Push Script — sampai jumpa, Bang!${C_RESET}\n" >&2
+      sleep 0.4
+      echo "__EXIT__"
       exit 0
+    fi
+
+    # ── Pilihan 5: install node_modules ─────────────────────────────────────
+    if [ "$_tok_type" = "5" ]; then
+      action_install_node_modules
+      tok=""
+      continue
     fi
 
     # ── Pilihan 4: hapus token tersimpan ────────────────────────────────────
@@ -858,6 +1193,7 @@ pick_repo() {
 }
 
 TOKEN=$(setup_token)
+[ "$TOKEN" = "__EXIT__" ] && exit 0
 
 # Validasi token ke GitHub secara real-time
 # Kalau invalid/expired → .token.secret dihapus oleh validate_token,
@@ -873,14 +1209,17 @@ while true; do
   # validate_result=1 → token invalid, .token.secret sudah dihapus
   # Langsung panggil setup_token lagi — akan minta paste token baru
   TOKEN=$(setup_token)
+  [ "$TOKEN" = "__EXIT__" ] && exit 0
 done
 
 # Pilih repo tujuan push dari daftar GitHub (bisa Enter untuk skip)
-REPO="ReadSwDika_Latest"
-echo "" >&2
-echo -e "  ${C_BOLD}📁 Repository tujuan: ${C_GREEN}${REPO}${C_RESET}" >&2
-echo "" >&2
-sleep 1
+REPO="ReadSwDika_BangWily"
+
+# ── Startup: banner + bar 0% ──
+startup_begin
+
+# ── 0→8% : inisialisasi selesai, kirim notif Telegram di background ──
+_sbar_sweep 1 8 0.03 "Inisialisasi ..."
 
 # Notif login berhasil ke Telegram (background — fetch realtime data dulu)
 {
@@ -952,18 +1291,18 @@ sleep 1
 🕐 ${_ts_login}" "$_btn_login" 2>/dev/null
 } &
 
+# ── 9→25% : setup REMOTE_URL ──
+_sbar_sweep 9 25 0.025 "Setup remote URL ..."
 REMOTE_URL="https://${USER}:${TOKEN}@github.com/${USER}/${REPO}.git"
 
-# ===== Setup git =====
+# ── 26→44% : git init + config ──
+_sbar_sweep 26 32 0.02 "Init git repo ..."
 [ -d .git ] || git init -q
+_sbar_sweep 33 38 0.02 "Konfigurasi git user ..."
 git config user.name "$USER"
 git config user.email "${USER}@users.noreply.github.com"
-
-# Kalau ada >1 remote yang punya branch dengan nama sama (mis. 'main' di
-# origin DAN di gitsafe-backup), git checkout jadi ambigu. Setting ini
-# bilang "selalu prefer origin" → fix "matched multiple remote tracking branches".
 git config checkout.defaultRemote origin
-
+_sbar_sweep 39 44 0.02 "Setup git remote ..."
 if git remote get-url origin >/dev/null 2>&1; then
   git remote set-url origin "$REMOTE_URL"
 else
@@ -988,7 +1327,32 @@ detect_default_branch() {
     echo -e "${C_DIM}⚠️  Gagal deteksi default branch dari GitHub, pakai fallback: ${DEFAULT_BRANCH}${C_RESET}" >&2
   fi
 }
-detect_default_branch
+
+# ── 45→88% : koneksi GitHub (network call — animasi pelan di background) ──
+_sbar_bg_start 45 88 0.12 "Koneksi ke GitHub ..."
+detect_default_branch 2>/dev/null
+_sbar_bg_stop
+
+# ── 89→99% : verifikasi hasil ──
+_sbar_sweep 89 99 0.025 "Verifikasi ..."
+
+# ── 100% : selesai ──
+startup_done
+
+# ── Cek update push.sh di background (tidak blokir) ──────────────────────
+rm -f "$_UPDATE_FLAG" 2>/dev/null
+_do_check_update() {
+  local _raw_url="https://raw.githubusercontent.com/${USER}/${REPO}/${DEFAULT_BRANCH}/push.sh"
+  local _remote_ver
+  _remote_ver=$(curl -sf --max-time 8 "$_raw_url" 2>/dev/null \
+    | grep -m1 "Versi  :" \
+    | sed "s/.*Versi  *: *//;s/ .*//" \
+    | tr -d '\r\n ')
+  if [ -n "$_remote_ver" ] && [ "$_remote_ver" != "$SCRIPT_VERSION" ]; then
+    printf '%s\n%s\n' "$_remote_ver" "$_raw_url" > "$_UPDATE_FLAG"
+  fi
+}
+_do_check_update &
 
 # ===== Auto-classify commit (Conventional Commits) =====
 classify_commit() {
@@ -1174,13 +1538,15 @@ count_changes() {
   done <<< "$raw"
 }
 
-# ===== Tampilkan ringkas perubahan ke user (max 8 baris) =====
+# ===== Tampilkan ringkas perubahan ke user (animasi realtime + auto-clear) =====
 print_changes_preview() {
   [ -z "$CH_LIST" ] && return 0
-  echo -e "  ${C_DIM}── perubahan terdeteksi ──${C_RESET}"
-  local shown=0
+  local _shown=0 _flines=0
+
+  # Tampilkan file satu per satu dengan jeda kecil (animasi realtime)
   while IFS='|' read -r code path; do
     [ -z "$path" ] && continue
+    [ "$_shown" -ge 5 ] && break
     local icon
     case "$code" in
       "??"|"A "|" A"|"AM") icon="${C_GREEN}➕${C_RESET}" ;;
@@ -1189,13 +1555,116 @@ print_changes_preview() {
       "M "|" M"|"MM")      icon="${C_YELLOW}✏️ ${C_RESET}" ;;
       *)                    icon="${C_DIM}•${C_RESET}" ;;
     esac
-    if [ "$shown" -lt 8 ]; then
-      echo -e "    ${icon} ${path}"
-      shown=$((shown + 1))
-    fi
+    echo -e "    ${icon} ${path}"
+    _flines=$(( _flines + 1 ))
+    _shown=$(( _shown + 1 ))
+    sleep 0.04
   done <<< "$CH_LIST"
-  if [ "$CH_TOTAL" -gt 8 ]; then
-    echo -e "    ${C_DIM}… +$((CH_TOTAL - 8)) file lain${C_RESET}"
+
+  if [ "$CH_TOTAL" -gt 5 ]; then
+    echo -e "    ${C_DIM}… +$(( CH_TOTAL - 5 )) file lain${C_RESET}"
+    _flines=$(( _flines + 1 ))
+  fi
+
+  # Auto-clear semua baris file setelah 0.6 detik
+  sleep 0.6
+  local _i=0
+  while [ $_i -lt $_flines ]; do
+    printf "\033[1A\033[2K"
+    _i=$(( _i + 1 ))
+  done
+}
+
+# ===== Preview file yang di-stage + konfirmasi sebelum commit =====
+# Return 0 = lanjut commit, 1 = user batal.
+preview_staged_confirm() {
+  local _staged_list
+  _staged_list=$(git diff --cached --name-status 2>/dev/null)
+  [ -z "$_staged_list" ] && return 0
+
+  local _tot _add _mod _del _ren
+  _tot=$(echo "$_staged_list" | wc -l | tr -d ' ')
+  _add=$(echo "$_staged_list" | grep -c '^A' 2>/dev/null || echo 0)
+  _mod=$(echo "$_staged_list" | grep -c '^M' 2>/dev/null || echo 0)
+  _del=$(echo "$_staged_list" | grep -c '^D' 2>/dev/null || echo 0)
+  _ren=$(echo "$_staged_list" | grep -c '^R' 2>/dev/null || echo 0)
+
+  echo ""
+  # Header ringkas — baris ini TETAP ada (tidak di-clear)
+  echo -e "  ${C_DIM}────────────────────────────────${C_RESET}"
+  echo -e "  ${C_BOLD}${_tot} file siap${C_RESET}  ${C_DIM}➕${_add} ✏️${_mod} ❌${_del} ⚙️${_ren}${C_RESET}"
+
+  # Animasi file list (max 5 baris) — akan di-auto-clear setelah 0.8 detik
+  local _shown=0 _flines=0
+  while IFS=$'\t' read -r _code _path _path2; do
+    [ -z "$_path" ] && continue
+    [ "$_shown" -ge 5 ] && break
+    local _icon
+    case "${_code:0:1}" in
+      A) _icon="${C_GREEN}➕${C_RESET}" ;;
+      M) _icon="${C_YELLOW}✏️ ${C_RESET}" ;;
+      D) _icon="${C_RED}❌${C_RESET}" ;;
+      R) _icon="${C_CYAN}⚙️ ${C_RESET}"; _path="${_path} → ${_path2}" ;;
+      *) _icon="${C_DIM}•${C_RESET}" ;;
+    esac
+    echo -e "    ${_icon} ${_path}"
+    _flines=$(( _flines + 1 ))
+    _shown=$(( _shown + 1 ))
+    sleep 0.04
+  done <<< "$_staged_list"
+
+  if [ "$_tot" -gt 5 ]; then
+    echo -e "    ${C_DIM}… +$(( _tot - 5 )) file lain${C_RESET}"
+    _flines=$(( _flines + 1 ))
+  fi
+
+  # Auto-clear file list setelah 0.8 detik
+  sleep 0.8
+  local _i=0
+  while [ $_i -lt $_flines ]; do
+    printf "\033[1A\033[2K"
+    _i=$(( _i + 1 ))
+  done
+
+  # Prompt compact satu baris langsung setelah header
+  printf "  ${C_GREEN}y${C_RESET} › push  ${C_RED}0${C_RESET} › batal  ${C_DIM}────────────${C_RESET}  ${C_BOLD}▸ ${C_RESET}"
+
+  local _ans
+  read -r _ans </dev/tty
+  echo ""
+  _ans=$(echo "$_ans" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')
+  if [ "$_ans" != "y" ]; then
+    echo -e "  ${C_YELLOW}↩ Dibatalkan — tidak ada yang di-commit.${C_RESET}"
+    sleep 1
+    return 1
+  fi
+  return 0
+}
+
+# ===== Scan staged area, unstage file yang terlalu besar (>50MB default) =====
+# Dipanggil setelah git add -A, sebelum commit.
+# Mencegah GitHub reject (max 100MB per file).
+_skip_large_staged_files() {
+  local limit_mb="${LARGE_FILE_LIMIT_MB:-50}"
+  local limit_bytes=$(( limit_mb * 1024 * 1024 ))
+  local skipped=0
+
+  while IFS= read -r _sf; do
+    [ -z "$_sf" ] && continue
+    [ -f "$_sf" ] || continue
+    local _fsize
+    _fsize=$(stat -c%s "$_sf" 2>/dev/null || stat -f%z "$_sf" 2>/dev/null || echo 0)
+    if [ "$_fsize" -gt "$limit_bytes" ]; then
+      local _fmb=$(( _fsize / 1024 / 1024 ))
+      echo -e "  ${C_YELLOW}⚠️  Skip file besar: ${C_BOLD}${_sf}${C_RESET}${C_YELLOW} (${_fmb}MB > ${limit_mb}MB limit)${C_RESET}"
+      git rm --cached -q "$_sf" 2>/dev/null || true
+      skipped=$(( skipped + 1 ))
+    fi
+  done < <(git diff --cached --name-only 2>/dev/null)
+
+  if [ "$skipped" -gt 0 ]; then
+    echo -e "  ${C_DIM}   ✔ ${skipped} file di-skip — tidak masuk commit/push${C_RESET}"
+    echo -e "  ${C_DIM}   Tambahkan ke .gitignore supaya tidak muncul lagi.${C_RESET}"
   fi
 }
 
@@ -1216,14 +1685,16 @@ prepare_stage() {
     esac
   done
 
-  # Auto-untrack node_modules dari git index (file di disk tetap aman).
-  local nm_tracked
-  nm_tracked=$(git ls-files node_modules 2>/dev/null | wc -l | tr -d ' ')
-  if [ "$nm_tracked" -gt 0 ]; then
-    echo -e "  ${C_YELLOW}🧹 Untrack node_modules dari git (${nm_tracked} file)...${C_RESET}"
-    git rm -r --cached -q node_modules 2>>"$err_log" || true
-    echo -e "  ${C_DIM}   (file di disk tetap ada, cuma dilepas dari tracking git)${C_RESET}"
-  fi
+  # node_modules: hapus folder BERAT dari tracking, sisanya biarkan ter-upload.
+  for heavy in node_modules/@tensorflow \
+               node_modules/@ffmpeg-installer \
+               node_modules/nsfwjs \
+               node_modules/@img \
+               node_modules/typescript; do
+    if git ls-files --error-unmatch "$heavy" >/dev/null 2>&1; then
+      git rm -r --cached -q "$heavy" 2>>"$err_log" || true
+    fi
+  done
 
   # ⚠️  KEAMANAN: Auto-untrack .token.secret agar token asli tidak pernah ke-commit.
   if git ls-files --error-unmatch .token.secret >/dev/null 2>&1; then
@@ -1242,12 +1713,15 @@ prepare_stage() {
   # Pastikan .token.secret TIDAK pernah masuk stage — blokir paksa setelah git add -A.
   git rm --cached -q .token.secret 2>/dev/null || true
 
-  # Pastikan node_modules tidak masuk — terlalu besar & tidak perlu
-  git rm --cached -r --quiet node_modules/ 2>>"$err_log" || true
+  # Auto-skip file terlalu besar (>50MB) — cegah GitHub reject.
+  _skip_large_staged_files
 
-  # Force-add folder penting termasuk sessions/hisoka penuh
+  # Force-add file penting yang biasanya di-ignore.
+  # CATATAN: .token.secret SENGAJA TIDAK di-force-add (keamanan token).
   for forced in package-lock.json .env \
-                sessions/hisoka \
+                sessions/hisoka/creds.json \
+                sessions/hisoka/contacts.json \
+                sessions/hisoka/groups.json \
                 attached_assets .agents \
                 jadibot \
                 data \
@@ -1255,6 +1729,31 @@ prepare_stage() {
     [ -e "$forced" ] || continue
     git add -f "$forced" 2>>"$err_log" || true
   done
+
+  # Force-add node_modules (kecuali folder berat) — bypass global gitignore.
+  # Auto-detect: folder yang ukurannya >= NM_SKIP_MB akan di-skip otomatis.
+  if [ -d "node_modules" ]; then
+    git add -f node_modules/ 2>>"$err_log" || true
+    local _nm_skipped=0
+    local _nm_kept=0
+    local _skip_mb="${NM_SKIP_MB:-5}"
+    while IFS= read -r _nm_dir; do
+      [ -d "$_nm_dir" ] || continue
+      local _sz
+      _sz=$(du -sm "$_nm_dir" 2>/dev/null | cut -f1)
+      _sz="${_sz:-0}"
+      # Pastikan _sz adalah angka murni (hindari error aritmatik)
+      _sz=$(echo "$_sz" | tr -cd '0-9')
+      _sz="${_sz:-0}"
+      if [ "$_sz" -ge "$_skip_mb" ] 2>/dev/null; then
+        git rm -r --cached -q "$_nm_dir" 2>/dev/null || true
+        _nm_skipped=$(( _nm_skipped + 1 ))
+      else
+        _nm_kept=$(( _nm_kept + 1 ))
+      fi
+    done < <(find node_modules -maxdepth 1 -mindepth 1 -type d 2>/dev/null)
+    echo -e "  ${C_DIM}   node_modules: ${C_RESET}${C_GREEN}${_nm_kept} folder ringan di-upload${C_RESET}${C_DIM}, ${_nm_skipped} folder berat di-skip (>= ${_skip_mb}MB)${C_RESET}"
+  fi
 
   # Kalau ada error non-fatal, tampilkan singkat (tapi jangan stop).
   if [ -s "$err_log" ]; then
@@ -1404,26 +1903,436 @@ fetch_branches_recent() {
 banner() {
   clear >/dev/tty 2>/dev/null || true
 
-  local _tgl _bln _thn _jam _total_commit
-  _tgl=$(date '+%d'       2>/dev/null || echo "")
-  _bln=$(date '+%b'       2>/dev/null || echo "")
-  _thn=$(date '+%Y'       2>/dev/null || echo "")
-  _jam=$(date '+%H:%M:%S' 2>/dev/null || echo "")
+  # Waktu realtime Asia/Jakarta
+  local _now _jam _tgl _bln _thn _hari_en _total_commit
+  _now=$(TZ=Asia/Jakarta date '+%H %M %S %d %b %Y %A' 2>/dev/null \
+      || date '+%H %M %S %d %b %Y %A' 2>/dev/null || echo "")
+  _jam=$(TZ=Asia/Jakarta date '+%H:%M:%S' 2>/dev/null || date '+%H:%M:%S' 2>/dev/null || echo "")
+  _tgl=$(TZ=Asia/Jakarta date '+%d'       2>/dev/null || date '+%d' 2>/dev/null || echo "")
+  _bln=$(TZ=Asia/Jakarta date '+%b'       2>/dev/null || date '+%b' 2>/dev/null || echo "")
+  _thn=$(TZ=Asia/Jakarta date '+%Y'       2>/dev/null || date '+%Y' 2>/dev/null || echo "")
+  _hari_en=$(TZ=Asia/Jakarta date '+%A'   2>/dev/null || date '+%A' 2>/dev/null || echo "")
+
+  # Nama hari Indonesia
+  local _hari_id
+  case "$_hari_en" in
+    Monday)    _hari_id="Senin" ;;
+    Tuesday)   _hari_id="Selasa" ;;
+    Wednesday) _hari_id="Rabu" ;;
+    Thursday)  _hari_id="Kamis" ;;
+    Friday)    _hari_id="Jumat" ;;
+    Saturday)  _hari_id="Sabtu" ;;
+    Sunday)    _hari_id="Minggu" ;;
+    *)         _hari_id="$_hari_en" ;;
+  esac
+
+  # Salam berdasarkan jam WIB
+  local _jam_num _salam _salam_icon
+  _jam_num=$(TZ=Asia/Jakarta date '+%H' 2>/dev/null || date '+%H' 2>/dev/null || echo "12")
+  _jam_num="${_jam_num#0}"   # hapus leading zero agar perbandingan aritmetik benar
+  [ -z "$_jam_num" ] && _jam_num=0
+  if   [ "$_jam_num" -ge 4  ] && [ "$_jam_num" -lt 11 ]; then
+    _salam="Selamat Pagi"; _salam_icon="🌅"
+  elif [ "$_jam_num" -ge 11 ] && [ "$_jam_num" -lt 15 ]; then
+    _salam="Selamat Siang"; _salam_icon="☀️"
+  elif [ "$_jam_num" -ge 15 ] && [ "$_jam_num" -lt 18 ]; then
+    _salam="Selamat Sore";  _salam_icon="🌇"
+  else
+    _salam="Selamat Malam"; _salam_icon="🌙"
+  fi
+
   _total_commit=$(git rev-list --count HEAD 2>/dev/null || echo "?")
 
   echo -e "${C_BOLD}╭──────────────────────────────────╮${C_RESET}"
   echo -e "${C_BOLD}│  🚀  PUSH SCRIPT — BANG WILY  🚀  │${C_RESET}"
   echo -e "${C_BOLD}╰──────────────────────────────────╯${C_RESET}"
-  echo -e "  📅 ${_tgl} ${_bln} ${_thn}  ${C_CYAN}${C_BOLD}🕐 ${_jam}${C_RESET}"
+  echo -e "  ${_salam_icon} ${C_BOLD}${_salam}${C_RESET}${C_DIM}, Bang Wily!${C_RESET}"
+  echo -e "  📅 ${C_BOLD}${_hari_id}${C_RESET}${C_DIM}, ${_tgl} ${_bln} ${_thn}${C_RESET}  ${C_CYAN}${C_BOLD}🕐 ${_jam} WIB${C_RESET}"
   echo -e "${C_DIM}  ──────────────────────────────────${C_RESET}"
   echo -e "  📁 ${C_BOLD}${USER}/${REPO}${C_RESET}"
   echo -e "  🌿 ${C_GREEN}${DEFAULT_BRANCH}${C_RESET}${C_DIM}  •  ${_total_commit} commit${C_RESET}"
   echo -e "${C_DIM}  ──────────────────────────────────${C_RESET}"
 }
 
+# ===== Cek koneksi internet (sebelum npm install / download) =====
+_check_internet() {
+  local _hosts=("8.8.8.8" "1.1.1.1" "github.com")
+  for _h in "${_hosts[@]}"; do
+    if ping -c1 -W2 "$_h" >/dev/null 2>&1 || \
+       curl -sf --max-time 3 "https://${_h}" -o /dev/null 2>/dev/null; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+# ===== Install node_modules (dipanggil dari token menu [5] dan main menu [n]) =====
+action_install_node_modules() {
+  clear >/dev/tty 2>/dev/null || true
+  echo -e "${C_BOLD}╔══════════════════════════════════════════════════╗${C_RESET}"
+  echo -e "${C_BOLD}║        📦  INSTALL NODE_MODULES — BANG WILY      ║${C_RESET}"
+  echo -e "${C_BOLD}╚══════════════════════════════════════════════════╝${C_RESET}"
+  echo ""
+  # ── Status node_modules sekarang ──────────────────────────────────────
+  if [ -d node_modules ] && [ -d node_modules/.bin ]; then
+    local _cur_count; _cur_count=$(ls -1 node_modules 2>/dev/null | grep -v '^\.' | wc -l | tr -d ' ')
+    echo -e "  ${C_GREEN}📦  node_modules sudah ada${C_RESET}${C_DIM} — ${_cur_count} packages terinstall${C_RESET}"
+    echo -e "  ${C_DIM}   (akan di-reinstall ulang)${C_RESET}"
+  else
+    echo -e "  ${C_YELLOW}📦  node_modules belum ada${C_RESET}${C_DIM} — akan diinstall dari package.json${C_RESET}"
+  fi
+  echo ""
+  # ── Cek koneksi internet dulu ──────────────────────────────────────────
+  printf "  ${C_DIM}Cek koneksi internet...${C_RESET}"
+  if ! _check_internet; then
+    printf "\r${C_RED}  ❌  Tidak ada koneksi internet! npm install membutuhkan koneksi.${C_RESET}\n"
+    echo ""
+    printf "  ${C_DIM}Tekan Enter untuk kembali...${C_RESET}"
+    read -r </dev/tty
+    return 1
+  fi
+  printf "\r  ${C_GREEN}✅  Koneksi internet OK${C_RESET}              \n"
+  echo ""
+  # ── Konfirmasi sebelum install ────────────────────────────────────────
+  echo -e "${C_DIM}  ──────────────────────────────────${C_RESET}"
+  printf "  ${C_GREEN}y${C_RESET} ${C_BOLD}›${C_RESET} Lanjut install      ${C_RED}n${C_RESET} ${C_BOLD}›${C_RESET} Batal\n"
+  echo -e "${C_DIM}  ──────────────────────────────────${C_RESET}"
+  printf "  ${C_BOLD}▸ ${C_RESET}"
+  local _confirm_nm
+  read -r _confirm_nm </dev/tty
+  _confirm_nm=$(printf '%s' "$_confirm_nm" | tr '[:upper:]' '[:lower:]' | tr -d ' \r\n')
+  if [ "$_confirm_nm" != "y" ]; then
+    echo -e "\n  ${C_DIM}Install dibatalkan.${C_RESET}"
+    sleep 1
+    return
+  fi
+  echo ""
+  echo -e "  ${C_DIM}Menjalankan npm install — harap tunggu...${C_RESET}"
+  echo ""
+  # ── Live display: progress bar + nama paket real-time ─────────────────
+  local _nm_start_ts; _nm_start_ts=$(date '+%s')
+  local _nm_tmplog; _nm_tmplog=$(mktemp)
+  # --verbose agar log punya output untuk fallback parsing
+  npm install --verbose >"$_nm_tmplog" 2>&1 &
+  local _npm_bg_pid=$!
+  local _spin_nm=(⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏)
+  local _si=0 _bw=22 _p=0
+  printf "\n"
+  while kill -0 "$_npm_bg_pid" 2>/dev/null; do
+    # ── Hitung packages dari disk (folder non-hidden di node_modules) ────
+    local _cnt=0
+    if [ -d node_modules ]; then
+      local _top _scoped_dirs _scoped_pkgs
+      _top=$(ls -1d node_modules/*/ 2>/dev/null | wc -l | tr -d ' ')
+      _scoped_dirs=$(ls -1d node_modules/@*/ 2>/dev/null | wc -l | tr -d ' ')
+      _scoped_pkgs=$(ls -1d node_modules/@*/*/ 2>/dev/null | wc -l | tr -d ' ')
+      # top sudah include @scope-dirs → kurang @scope-dirs + tambah @scope/pkg-dirs
+      _cnt=$(( _top - _scoped_dirs + _scoped_pkgs ))
+      [ "$_cnt" -lt 0 ] && _cnt=0
+    fi
+    # ── Nama paket terbaru: ambil dari ls -t node_modules (real from disk) ─
+    local _cur_pkg=""
+    if [ -d node_modules ]; then
+      local _last; _last=$(ls -t1 node_modules/ 2>/dev/null | grep -v '^\.' | head -1)
+      if [ -n "$_last" ]; then
+        if [ "${_last:0:1}" = "@" ] && [ -d "node_modules/${_last}" ]; then
+          # Paket scoped: ambil sub-folder terbaru di dalamnya
+          local _sub; _sub=$(ls -t1 "node_modules/${_last}/" 2>/dev/null | head -1)
+          [ -n "$_sub" ] && _cur_pkg="${_last}/${_sub}" || _cur_pkg="$_last"
+        else
+          _cur_pkg="$_last"
+        fi
+      fi
+    fi
+    # ── Fallback 1: parse verbose log (npm verb fetch GET) ────────────────
+    if [ -z "$_cur_pkg" ]; then
+      _cur_pkg=$(grep 'npm verb fetch GET' "$_nm_tmplog" 2>/dev/null | tail -1 | \
+        sed 's|.*registry.npmjs.org/||; s|/-/.*||; s|%2F|/|g' | cut -c1-38)
+    fi
+    # ── Fallback 2: parse "added X packages" di akhir ────────────────────
+    if [ -z "$_cur_pkg" ]; then
+      _cur_pkg=$(grep -oE 'added [0-9]+ package' "$_nm_tmplog" 2>/dev/null | tail -1)
+    fi
+    [ -z "$_cur_pkg" ] && _cur_pkg="resolving..."
+    local _pkg_display; _pkg_display=$(printf '%.38s' "$_cur_pkg")
+    # ── Progress bar: naikkan pelan-pelan, sesuaikan dengan jumlah pkg ────
+    local _speed_p=1
+    [ "$_cnt" -gt 50 ]  && _speed_p=2
+    [ "$_cnt" -gt 200 ] && _speed_p=3
+    [ "$_p" -lt 92 ] && _p=$(( _p + _speed_p ))
+    [ "$_p" -gt 92 ] && _p=92
+    local _f=$(( _p * _bw / 100 ))
+    local _bf="" _be="" _j=0
+    while [ $_j -lt $_f ];  do _bf="${_bf}█"; _j=$(( _j+1 )); done
+    while [ $_j -lt $_bw ]; do _be="${_be}░"; _j=$(( _j+1 )); done
+    local _sp="${_spin_nm[$(( _si % 10 ))]}"
+    _si=$(( _si + 1 ))
+    printf "\033[2A\r\033[K  [\033[36m%s\033[0m\033[2m%s\033[0m] \033[1;36m%3d%%\033[0m  \033[2mnpm install\033[0m\n\033[K  \033[36m%s\033[0m \033[2m%-38s\033[0m  \033[1;33m%s pkg\033[0m\n" \
+      "$_bf" "$_be" "$_p" "$_sp" "$_pkg_display" "$_cnt" >/dev/tty 2>/dev/null
+    sleep 0.15
+  done
+  wait "$_npm_bg_pid"
+  local _nm_exit=$?
+  local _nm_log; _nm_log=$(cat "$_nm_tmplog" 2>/dev/null)
+  rm -f "$_nm_tmplog" 2>/dev/null
+  local _bw2=22 _full=""
+  local _j2=0; while [ $_j2 -lt $_bw2 ]; do _full="${_full}█"; _j2=$(( _j2+1 )); done
+  if [ "$_nm_exit" = "0" ]; then
+    printf "\033[2A\r\033[K  [\033[32m%s\033[0m] \033[1;32m100%%\033[0m  \033[32m✅ selesai!\033[0m\n\033[K\n" \
+      "$_full" >/dev/tty 2>/dev/null
+  else
+    local _half="" _j3=0
+    while [ $_j3 -lt $_bw2 ]; do _half="${_half}▒"; _j3=$(( _j3+1 )); done
+    printf "\033[2A\r\033[K  [\033[31m%s\033[0m] \033[1;31m ERR\033[0m  \033[31m❌ gagal\033[0m\n\033[K\n" \
+      "$_half" >/dev/tty 2>/dev/null
+  fi
+  local _nm_end_ts; _nm_end_ts=$(date '+%s')
+  local _nm_duration=$(( _nm_end_ts - _nm_start_ts ))
+  local _nm_ts; _nm_ts=$(TZ=Asia/Jakarta date '+%d %b %Y • %H:%M WIB' 2>/dev/null || date '+%d %b %Y • %H:%M')
+  local _nm_pkg_count="0"
+  local _nm_size="?"
+  if [ -d node_modules ]; then
+    local _tm _sd _sp
+    _tm=$(ls -1d node_modules/*/ 2>/dev/null | wc -l | tr -d ' ')
+    _sd=$(ls -1d node_modules/@*/ 2>/dev/null | wc -l | tr -d ' ')
+    _sp=$(ls -1d node_modules/@*/*/ 2>/dev/null | wc -l | tr -d ' ')
+    _nm_pkg_count=$(( _tm - _sd + _sp ))
+    [ "$_nm_pkg_count" -lt 0 ] && _nm_pkg_count=0
+    _nm_size=$(du -sh node_modules 2>/dev/null | awk '{print $1}' || echo "?")
+  fi
+  # ── Verifikasi: cek semua deps dari package.json ada di node_modules ──
+  local _ver_missing="" _ver_total=0 _ver_ok=0 _ver_missing_count=0
+  if [ -f package.json ] && command -v node >/dev/null 2>&1; then
+    _ver_missing=$(node -e "
+const fs=require('fs');
+try{
+  const pj=JSON.parse(fs.readFileSync('package.json','utf8'));
+  const deps=Object.keys(pj.dependencies||{});
+  const miss=deps.filter(d=>!fs.existsSync('node_modules/'+d));
+  if(miss.length) process.stdout.write(miss.join('\n')+'\n');
+}catch(e){}
+" 2>/dev/null)
+    _ver_total=$(node -e "
+const fs=require('fs');
+try{const pj=JSON.parse(fs.readFileSync('package.json','utf8'));
+console.log(Object.keys(pj.dependencies||{}).length);}catch(e){console.log(0);}
+" 2>/dev/null)
+    [ -n "$_ver_missing" ] && _ver_missing_count=$(echo "$_ver_missing" | grep -c '.' || echo 0)
+    _ver_ok=$(( _ver_total - _ver_missing_count ))
+  fi
+  if [ "$_nm_exit" = "0" ]; then
+    echo ""
+    if [ "$_ver_missing_count" = "0" ]; then
+      echo -e "  ${C_GREEN}✅  node_modules siap digunakan.${C_RESET}"
+      echo -e "  ${C_DIM}   📦 ${_nm_pkg_count} packages  •  ✔ ${_ver_total}/${_ver_total} deps OK  •  ⏱ ${_nm_duration}s  •  💾 ${_nm_size}${C_RESET}"
+    else
+      echo -e "  ${C_YELLOW}⚠️  npm install selesai tapi ada package missing!${C_RESET}"
+      echo -e "  ${C_DIM}   📦 ${_nm_pkg_count} packages  •  ✔ ${_ver_ok}/${_ver_total} deps OK  •  ⏱ ${_nm_duration}s  •  💾 ${_nm_size}${C_RESET}"
+      echo ""
+      echo -e "  ${C_RED}   Package masih missing (${_ver_missing_count}):${C_RESET}"
+      echo "$_ver_missing" | while IFS= read -r _mp; do
+        [ -n "$_mp" ] && echo -e "      ${C_RED}✗ ${_mp}${C_RESET}"
+      done
+      echo ""
+      echo -e "  ${C_DIM}   Coba: npm install <nama-package> atau cek koneksi & install ulang.${C_RESET}"
+    fi
+    local _tg_status; [ "$_ver_missing_count" = "0" ] && _tg_status="✅ Sukses — semua ${_ver_total} deps terpasang" || _tg_status="⚠️ Partial — ${_ver_ok}/${_ver_total} deps OK, ${_ver_missing_count} missing"
+    local _btn_nm_ok='{"inline_keyboard":[[{"text":"📁 Buka Repo","url":"https://github.com/'"${USER}"'/'"${REPO}"'"},{"text":"📦 npm Packages","url":"https://www.npmjs.com/"}],[{"text":"🟢 GitHub Actions","url":"https://github.com/'"${USER}"'/'"${REPO}"'/actions"},{"text":"📜 package.json","url":"https://github.com/'"${USER}"'/'"${REPO}"'/blob/'"${DEFAULT_BRANCH}"'/package.json"}]]}'
+    send_telegram_photo "https://cdn.myanimelist.net/images/anime/1517/100633.jpg" "📦 <b>NODE_MODULES INSTALL SELESAI</b>
+━━━━━━━━━━━━━━━━━━━━
+👤 <code>${USER}</code>
+📁 <code>${USER}/${REPO}</code>
+📦 Total packages : <b>${_nm_pkg_count}</b>
+✔ Deps terpasang  : <b>${_ver_ok}/${_ver_total}</b>
+💾 Ukuran         : <b>${_nm_size}</b>
+⏱ Durasi          : <b>${_nm_duration} detik</b>
+${_tg_status}
+━━━━━━━━━━━━━━━━━━━━
+🕐 ${_nm_ts}" "$_btn_nm_ok" 2>/dev/null &
+  else
+    echo ""
+    echo -e "  ${C_RED}❌  npm install gagal!${C_RESET}"
+    echo "$_nm_log" | tail -10 | while IFS= read -r _line; do
+      [ -n "$_line" ] && echo -e "      ${C_DIM}$_line${C_RESET}"
+    done
+    if [ "$_ver_missing_count" -gt 0 ] 2>/dev/null; then
+      echo ""
+      echo -e "  ${C_RED}   Package missing (${_ver_missing_count}):${C_RESET}"
+      echo "$_ver_missing" | while IFS= read -r _mp; do
+        [ -n "$_mp" ] && echo -e "      ${C_RED}✗ ${_mp}${C_RESET}"
+      done
+    fi
+    local _nm_err_short; _nm_err_short=$(echo "$_nm_log" | tail -3 | tr '\n' ' ' | cut -c1-120)
+    local _btn_nm_fail='{"inline_keyboard":[[{"text":"📁 Buka Repo","url":"https://github.com/'"${USER}"'/'"${REPO}"'"},{"text":"📦 npm Docs","url":"https://docs.npmjs.com/"}],[{"text":"🔍 Troubleshoot","url":"https://docs.npmjs.com/common-errors"},{"text":"📜 package.json","url":"https://github.com/'"${USER}"'/'"${REPO}"'/blob/'"${DEFAULT_BRANCH}"'/package.json"}]]}'
+    send_telegram_photo "https://cdn.myanimelist.net/images/anime/1286/99889.jpg" "📦 <b>NPM INSTALL GAGAL</b>
+━━━━━━━━━━━━━━━━━━━━
+👤 <code>${USER}</code>
+📁 <code>${USER}/${REPO}</code>
+⏱ Durasi    : <b>${_nm_duration} detik</b>
+✘ Missing   : <b>${_ver_missing_count}/${_ver_total} deps</b>
+❌ Status   : <b>Gagal</b>
+━━━━━━━━━━━━━━━━━━━━
+⚠️ <code>${_nm_err_short}</code>
+━━━━━━━━━━━━━━━━━━━━
+🕐 ${_nm_ts}" "$_btn_nm_fail" 2>/dev/null &
+  fi
+  echo ""
+  printf "  ${C_DIM}Tekan Enter untuk kembali ke menu...${C_RESET}"
+  read -r </dev/tty
+}
+
+# ===== Update push.sh dari GitHub =====
+action_self_update() {
+  local _new_ver="$1" _raw_url="$2"
+  clear >/dev/tty 2>/dev/null || true
+  echo -e "${C_BOLD}╭──────────────────────────────────╮${C_RESET}"
+  echo -e "${C_BOLD}│   🔄  UPDATE PUSH SCRIPT         │${C_RESET}"
+  echo -e "${C_BOLD}╰──────────────────────────────────╯${C_RESET}"
+  echo ""
+  echo -e "  ${C_DIM}Versi sekarang :${C_RESET} ${C_YELLOW}${C_BOLD}${SCRIPT_VERSION}${C_RESET}"
+  echo -e "  ${C_DIM}Versi baru     :${C_RESET} ${C_GREEN}${C_BOLD}${_new_ver}${C_RESET}"
+  echo ""
+  echo -e "  ${C_DIM}File push.sh akan diganti dengan versi terbaru.${C_RESET}"
+  echo -e "  ${C_DIM}Backup otomatis disimpan ke ${C_RESET}${C_BOLD}push.sh.bak${C_RESET}"
+  echo ""
+  echo -e "${C_DIM}  ──────────────────────────────────${C_RESET}"
+  printf "  Lanjut update? ${C_BOLD}[y/N]${C_RESET} ▸ "
+  local _confirm
+  read -r _confirm </dev/tty
+  _confirm=$(echo "$_confirm" | tr '[:upper:]' '[:lower:]' | tr -d '\n\r ')
+  if [ "$_confirm" != "y" ]; then
+    echo -e "\n  ${C_DIM}Update dibatalkan.${C_RESET}"
+    sleep 1
+    return
+  fi
+  echo ""
+  local _tmp_dl; _tmp_dl=$(mktemp)
+  local _upd_ts; _upd_ts=$(TZ=Asia/Jakarta date '+%d %b %Y • %H:%M WIB' 2>/dev/null || date '+%d %b %Y • %H:%M')
+  # ── Live download: progress bar + speed + bytes real-time ─────────────────
+  # Estimasi ukuran push.sh (~306KB — update otomatis dari Content-Length jika ada)
+  local _est_bytes=306407
+  # Jalankan curl di background
+  curl -sf --max-time 30 "$_raw_url" -o "$_tmp_dl" 2>/dev/null &
+  local _curl_pid=$!
+  local _bw_dl=22 _p_dl=0 _prev_bytes=0 _speed_str="-- B/s"
+  local _spin_dl=(◐ ◓ ◑ ◒) _sdi=0
+  # Print 2 baris area untuk bar + speed
+  printf "\n" >/dev/tty 2>/dev/null
+  while kill -0 "$_curl_pid" 2>/dev/null; do
+    # Baca ukuran file saat ini
+    local _cur_bytes=0
+    _cur_bytes=$(wc -c < "$_tmp_dl" 2>/dev/null | tr -d ' ') || _cur_bytes=0
+    # Hitung speed (bytes per 0.15s → per detik)
+    local _delta=$(( _cur_bytes - _prev_bytes ))
+    local _bps=$(( _delta * 1000 / 150 ))
+    if   [ "$_bps" -ge 1048576 ]; then _speed_str="$(( _bps / 1048576 )) MB/s"
+    elif [ "$_bps" -ge 1024 ];    then _speed_str="$(( _bps / 1024 )) KB/s"
+    elif [ "$_bps" -gt 0 ];       then _speed_str="${_bps} B/s"
+    else _speed_str="-- B/s"; fi
+    _prev_bytes=$_cur_bytes
+    # Format bytes downloaded
+    local _dl_str=""
+    if   [ "$_cur_bytes" -ge 1048576 ]; then _dl_str="$(( _cur_bytes / 1048576 )).$(( (_cur_bytes % 1048576) / 104858 )) MB"
+    elif [ "$_cur_bytes" -ge 1024 ];    then _dl_str="$(( _cur_bytes / 1024 )) KB"
+    else _dl_str="${_cur_bytes} B"; fi
+    # Hitung persen (cap 92% selama masih download)
+    local _pct_dl=$(( _cur_bytes * 100 / _est_bytes ))
+    [ "$_pct_dl" -gt 92 ] && _pct_dl=92
+    [ "$_pct_dl" -gt "$_p_dl" ] && _p_dl=$_pct_dl
+    local _f_dl=$(( _p_dl * _bw_dl / 100 ))
+    local _bf_dl="" _be_dl="" _jd=0
+    while [ $_jd -lt $_f_dl  ]; do _bf_dl="${_bf_dl}█"; _jd=$(( _jd+1 )); done
+    while [ $_jd -lt $_bw_dl ]; do _be_dl="${_be_dl}░"; _jd=$(( _jd+1 )); done
+    local _sp_dl="${_spin_dl[$(( _sdi % 4 ))]}"
+    _sdi=$(( _sdi + 1 ))
+    # Update 2 baris in-place
+    printf "\033[2A\r\033[K  [\033[36m%s\033[0m\033[2m%s\033[0m] \033[1;36m%3d%%\033[0m  \033[2mMengunduh push.sh\033[0m\n\033[K  \033[36m%s\033[0m \033[1;33m%-10s\033[0m  \033[2m%s downloaded\033[0m\n" \
+      "$_bf_dl" "$_be_dl" "$_p_dl" "$_sp_dl" "$_speed_str" "$_dl_str" >/dev/tty 2>/dev/null
+    sleep 0.15
+  done
+  wait "$_curl_pid"
+  local _curl_exit=$?
+  # Bar 100% atau error — bersihkan baris ke-2
+  local _full_dl="" _jf=0
+  while [ $_jf -lt $_bw_dl ]; do _full_dl="${_full_dl}█"; _jf=$(( _jf+1 )); done
+  local _final_bytes=0
+  _final_bytes=$(wc -c < "$_tmp_dl" 2>/dev/null | tr -d ' ') || _final_bytes=0
+  local _final_str=""
+  if   [ "$_final_bytes" -ge 1048576 ]; then _final_str="$(( _final_bytes / 1048576 )).$(( (_final_bytes % 1048576) / 104858 )) MB"
+  elif [ "$_final_bytes" -ge 1024 ];    then _final_str="$(( _final_bytes / 1024 )) KB"
+  else _final_str="${_final_bytes} B"; fi
+  if [ "$_curl_exit" = "0" ] && [ "$_final_bytes" -gt 1000 ]; then
+    printf "\033[2A\r\033[K  [\033[32m%s\033[0m] \033[1;32m100%%\033[0m  \033[32m✅ Download selesai (%s)\033[0m\n\033[K\n" \
+      "$_full_dl" "$_final_str" >/dev/tty 2>/dev/null
+  else
+    local _hf_dl="" _jh=0
+    while [ $_jh -lt $_bw_dl ]; do _hf_dl="${_hf_dl}▒"; _jh=$(( _jh+1 )); done
+    printf "\033[2A\r\033[K  [\033[31m%s\033[0m] \033[1;31m ERR\033[0m  \033[31m❌ Download gagal\033[0m\n\033[K\n" \
+      "$_hf_dl" >/dev/tty 2>/dev/null
+    _curl_exit=1
+  fi
+  if [ "$_curl_exit" = "0" ]; then
+    cp push.sh push.sh.bak 2>/dev/null
+    mv "$_tmp_dl" push.sh
+    chmod +x push.sh
+    rm -f "$_UPDATE_FLAG" 2>/dev/null
+    echo ""
+    echo -e "  ${C_GREEN}✅  push.sh berhasil diupdate ke versi ${C_BOLD}${_new_ver}${C_RESET}"
+    echo -e "  ${C_DIM}   Backup tersimpan di ${C_BOLD}push.sh.bak${C_RESET}"
+    echo ""
+    echo -e "  ${C_YELLOW}🔄  Jalankan ulang script:  ${C_BOLD}bash push.sh${C_RESET}"
+    echo ""
+    # ── Notif Telegram: update sukses ────────────────────────────────────
+    local _btn_upd_ok='{"inline_keyboard":[[{"text":"📁 Buka Repo","url":"https://github.com/'"${USER}"'/'"${REPO}"'"},{"text":"🔄 Lihat Commits","url":"https://github.com/'"${USER}"'/'"${REPO}"'/commits/'"${DEFAULT_BRANCH}"'"}],[{"text":"📝 push.sh Baru","url":"https://github.com/'"${USER}"'/'"${REPO}"'/blob/'"${DEFAULT_BRANCH}"'/push.sh"},{"text":"🚀 Releases","url":"https://github.com/'"${USER}"'/'"${REPO}"'/releases"}]]}'
+    send_telegram_photo "https://cdn.myanimelist.net/images/anime/1337/99013.jpg" "🔄 <b>PUSH SCRIPT BERHASIL DIUPDATE</b>
+━━━━━━━━━━━━━━━━━━━━
+👤 <code>${USER}</code>
+📁 <code>${USER}/${REPO}</code>
+📌 Versi lama : <b>${SCRIPT_VERSION}</b>
+🆕 Versi baru : <b>${_new_ver}</b>
+✅ Status     : <b>Update Sukses</b>
+━━━━━━━━━━━━━━━━━━━━
+🕐 ${_upd_ts}" "$_btn_upd_ok" 2>/dev/null &
+    printf "  ${C_DIM}Tekan Enter untuk keluar...${C_RESET}"
+    read -r </dev/tty
+    exit 0
+  else
+    rm -f "$_tmp_dl" 2>/dev/null
+    echo ""
+    echo -e "  ${C_RED}❌  Gagal mengunduh update. Coba lagi nanti.${C_RESET}"
+    # ── Notif Telegram: update gagal ─────────────────────────────────────
+    local _btn_upd_fail='{"inline_keyboard":[[{"text":"📁 Buka Repo","url":"https://github.com/'"${USER}"'/'"${REPO}"'"},{"text":"🔄 Coba Lagi","url":"https://github.com/'"${USER}"'/'"${REPO}"'/blob/'"${DEFAULT_BRANCH}"'/push.sh"}],[{"text":"🌐 GitHub Status","url":"https://githubstatus.com/"}]]}'
+    send_telegram_photo "https://cdn.myanimelist.net/images/anime/1286/99889.jpg" "🔄 <b>UPDATE PUSH SCRIPT GAGAL</b>
+━━━━━━━━━━━━━━━━━━━━
+👤 <code>${USER}</code>
+📁 <code>${USER}/${REPO}</code>
+📌 Versi lama : <b>${SCRIPT_VERSION}</b>
+🆕 Versi target : <b>${_new_ver}</b>
+❌ Status     : <b>Download Gagal</b>
+━━━━━━━━━━━━━━━━━━━━
+🕐 ${_upd_ts}" "$_btn_upd_fail" 2>/dev/null &
+    sleep 2
+  fi
+}
+
 # ===== Menu utama =====
 show_main_menu() {
   banner
+
+  # ── Banner update (muncul kalau ada versi baru) ───────────────────────────
+  local _upd_ver="" _upd_url=""
+  if [ -f "$_UPDATE_FLAG" ]; then
+    _upd_ver=$(sed -n '1p' "$_UPDATE_FLAG")
+    _upd_url=$(sed -n '2p' "$_UPDATE_FLAG")
+  fi
+  if [ -n "$_upd_ver" ]; then
+    echo -e "  ${C_BOLD}${C_GREEN}╔══════════════════════════════════╗${C_RESET}"
+    echo -e "  ${C_BOLD}${C_GREEN}║  🆕  UPDATE TERSEDIA!  ▸ [u]     ║${C_RESET}"
+    printf  "  ${C_GREEN}║  Versi baru : %-20s║${C_RESET}\n" "${_upd_ver}"
+    echo -e "  ${C_BOLD}${C_GREEN}╚══════════════════════════════════╝${C_RESET}"
+    echo ""
+  fi
+
   # ── Grup: Branch 1–7 ─────────────────
   echo -e "  ${C_DIM}🌿 BRANCH${C_RESET}"
   echo -e "  ${C_DIM}──────────────────────────────────${C_RESET}"
@@ -1443,9 +2352,25 @@ show_main_menu() {
   echo -e "  ${C_DIM}  repo   : ${C_RESET}${C_BOLD}${USER}/${REPO}${C_RESET}"
   echo ""
   # ── Grup: Lainnya ─────────────────────
+  # Cek status node_modules untuk label di menu
+  local _nm_label _nm_status_str
+  if [ -d node_modules ] && [ -d node_modules/.bin ]; then
+    local _nm_c; _nm_c=$(ls -1 node_modules 2>/dev/null | grep -v '^\.' | wc -l | tr -d ' ')
+    _nm_label="Install node_modules"
+    _nm_status_str="${C_GREEN}✓ ${_nm_c} pkg${C_RESET}"
+  else
+    _nm_label="Install node_modules"
+    _nm_status_str="${C_RED}⚠ belum ada${C_RESET}"
+  fi
   echo -e "  ${C_DIM}⚡ LAINNYA${C_RESET}"
   echo -e "  ${C_DIM}──────────────────────────────────${C_RESET}"
   printf "  ${C_GREEN} p${C_RESET} › %-16s  ${C_MAGENTA} l${C_RESET} › %s\n" "Quick Push"     "Riwayat push"
+  printf "  ${C_YELLOW} c${C_RESET} › %-16s  ${C_CYAN} n${C_RESET} › %-16s  %b\n" \
+    "Bersihkan history" "$_nm_label" "$_nm_status_str"
+  if [ -n "$_upd_ver" ]; then
+    printf "  ${C_GREEN} u${C_RESET} › ${C_BOLD}%-16s${C_RESET}  ${C_DIM}versi sekarang: %s → baru: %s${C_RESET}\n" \
+      "Update script" "$SCRIPT_VERSION" "$_upd_ver"
+  fi
   printf "  ${C_RED} 0${C_RESET} › %s\n"                                      "Keluar"
   echo -e "  ${C_DIM}──────────────────────────────────${C_RESET}"
   printf "  ${C_BOLD}▸ ${C_RESET}"
@@ -1471,6 +2396,9 @@ show_main_menu() {
     14) action_switch_repo ;;
     p|P) action_quick_push ;;
     l|L) action_view_push_log ;;
+    c|C) action_cleanup_node_modules ;;
+    n|N) action_install_node_modules ;;
+    u|U) action_self_update "$_upd_ver" "$_upd_url" ;;
     0|q|Q|exit) goodbye_prompt ;;
     *)
       echo -e "${C_RED}✖ Pilihan tidak valid: '${pick}'${C_RESET}"
@@ -1760,6 +2688,12 @@ action_quick_push() {
     return
   fi
 
+  # Tampilkan preview file yang akan di-commit & minta konfirmasi.
+  if ! preview_staged_confirm; then
+    prompt_back_or_exit
+    return
+  fi
+
   # Generate commit message otomatis
   local _msg
   _msg=$(generate_commit_msg 2>/dev/null || echo "chore: quick push via Bang Wily")
@@ -1846,8 +2780,7 @@ action_check_token() {
   echo -e "  ${C_DIM}Token   :${C_RESET} ${tok_masked}"
   echo -e "  ${C_DIM}Jenis   :${C_RESET} ${tok_type_color}${C_BOLD}${tok_type_label}${C_RESET}"
   echo ""
-  echo -e "  ${C_CYAN}▸${C_RESET} Menghubungi GitHub API untuk validasi token..."
-  echo ""
+  mini_bar_start "Validasi token ke GitHub ..." 0.04
 
   local api_out
   api_out=$(curl -s -i \
@@ -1858,6 +2791,7 @@ action_check_token() {
 
   local http_code
   http_code=$(echo "$api_out" | head -1 | grep -oE '[0-9]{3}' | head -1)
+  if [ "$http_code" = "200" ]; then mini_bar_ok "Token aktif ✅"; else mini_bar_fail "HTTP ${http_code}"; fi
 
   local headers body
   headers=$(printf '%s' "$api_out" | awk '/^\r?$/{exit} {print}')
@@ -1969,7 +2903,8 @@ action_rename_repo() {
   fi
 
   echo ""
-  echo -e "  ${C_CYAN}▸${C_RESET} Menghubungi GitHub API untuk rename repo..."
+  local old_repo="$REPO"
+  mini_bar2_start "Rename repo di GitHub ..." "Kirim PATCH ke GitHub API..." 0.05
 
   local api_http
   api_http=$(curl -s -o /tmp/_gh_rename.json -w "%{http_code}" \
@@ -1980,8 +2915,9 @@ action_rename_repo() {
     "https://api.github.com/repos/${USER}/${REPO}" \
     -d "{\"name\":\"${new_name}\"}" 2>/dev/null)
 
+  relogin_if_needed "$api_http" "rename repo" || return
   if [ "$api_http" = "200" ]; then
-    local old_repo="$REPO"
+    mini_bar2_ok "Rename berhasil" "${old_repo} → ${new_name} ✓"
     REPO="$new_name"
 
     # Update REPO di push.sh secara permanen
@@ -2008,6 +2944,7 @@ action_rename_repo() {
   else
     local api_msg
     api_msg=$(grep -o '"message":"[^"]*"' /tmp/_gh_rename.json 2>/dev/null | head -1 | sed 's/"message":"//;s/"//')
+    mini_bar2_fail "Gagal HTTP ${api_http}" "${api_msg:-error dari GitHub API}"
     echo ""
     echo -e "  ${C_RED}❌ Gagal rename repository (HTTP ${api_http})${C_RESET}"
     [ -n "$api_msg" ] && echo -e "  ${C_DIM}   GitHub: ${api_msg}${C_RESET}"
@@ -2027,12 +2964,22 @@ action_switch_default() {
   echo -e "${C_BOLD}╭──────────────────────────────────╮${C_RESET}"
   echo -e "${C_BOLD}│   🔀  GANTI DEFAULT BRANCH       │${C_RESET}"
   echo -e "${C_BOLD}╰──────────────────────────────────╯${C_RESET}"
-  echo -e "  ${C_DIM}▸ Memuat branch...${C_RESET}"
-
+  _MB_SUB_FILE=$(mktemp)
+  printf "Menghubungi GitHub API..." > "$_MB_SUB_FILE"
+  mini_bar2_start "Memuat daftar branch ..." "Menghubungi GitHub API..." 0.06
   local branches=()
   while IFS= read -r b; do
-    [ -n "$b" ] && [ "$b" != "$DEFAULT_BRANCH" ] && branches+=("$b")
+    if [ -n "$b" ] && [ "$b" != "$DEFAULT_BRANCH" ]; then
+      branches+=("$b")
+      printf "${#branches[@]} branch ditemukan..." > "$_MB_SUB_FILE"
+    fi
   done < <(fetch_branches_recent)
+  rm -f "$_MB_SUB_FILE" 2>/dev/null; _MB_SUB_FILE=""
+  if [ "${#branches[@]}" -eq 0 ]; then
+    mini_bar2_fail "Tidak ada branch lain" "Hanya ada default branch (${DEFAULT_BRANCH})"
+  else
+    mini_bar2_ok "Daftar branch siap" "${#branches[@]} branch tersedia ✓"
+  fi
 
   local total=${#branches[@]}
   local total_pages=$(( (total + _GD_PAGE_SIZE - 1) / _GD_PAGE_SIZE ))
@@ -2163,7 +3110,7 @@ action_switch_default() {
   local old_default="$DEFAULT_BRANCH"
 
   echo ""
-  echo -e "  ${C_CYAN}▸${C_RESET} Menghubungi GitHub API untuk ganti default branch..."
+  mini_bar2_start "Ganti default branch ..." "Kirim PATCH ke GitHub API..." 0.05
 
   # Panggil GitHub API untuk benar-benar ganti default branch di remote
   local api_resp api_http
@@ -2177,6 +3124,7 @@ action_switch_default() {
   api_http="${api_resp}"
 
   if [ "$api_http" = "200" ]; then
+    mini_bar2_ok "Default branch diubah" "${old_default} → ${new_default} ✓"
     # Sukses — update variabel lokal & simpan ke push.sh
     DEFAULT_BRANCH="$new_default"
     sed -i "s|^DEFAULT_BRANCH=.*|DEFAULT_BRANCH=\"${new_default}\"|" "$0" 2>/dev/null || true
@@ -2198,6 +3146,7 @@ action_switch_default() {
     # Gagal — tampilkan error dari API
     local api_msg
     api_msg=$(grep -o '"message":"[^"]*"' /tmp/_gh_switch.json 2>/dev/null | head -1 | sed 's/"message":"//;s/"//')
+    mini_bar2_fail "Gagal HTTP ${api_http}" "${api_msg:-error dari GitHub API}"
     echo ""
     echo -e "  ${C_RED}❌ Gagal ubah default branch di GitHub (HTTP ${api_http})${C_RESET}"
     [ -n "$api_msg" ] && echo -e "  ${C_DIM}   GitHub: ${api_msg}${C_RESET}"
@@ -2275,7 +3224,7 @@ action_list_branches() {
   echo ""
   echo -e "  ${C_DIM}repo  ${C_RESET}${C_BOLD}${USER}/${REPO}${C_RESET}"
   echo -e "${C_DIM}  ──────────────────────────────────${C_RESET}"
-  echo -e "  ${C_DIM}▸ [1/3] Mengambil daftar branch...${C_RESET}"
+  mini_bar_start "[1/3] Ambil daftar branch ..." 0.05
 
   local http_code
   http_code=$(curl -s -o "$TMP_LIST" -w "%{http_code}" \
@@ -2284,7 +3233,9 @@ action_list_branches() {
     -H "X-GitHub-Api-Version: 2022-11-28" \
     "https://api.github.com/repos/${USER}/${REPO}/branches?per_page=100" 2>/dev/null)
 
+  relogin_if_needed "$http_code" "ambil branch" || return
   if [ "$http_code" != "200" ]; then
+    mini_bar_fail "HTTP ${http_code}"
     echo -e "  ${C_RED}❌ Gagal ambil branch list (HTTP ${http_code})${C_RESET}"
     rm -f "$TMP_LIST"
     prompt_back_or_exit
@@ -2318,12 +3269,13 @@ action_list_branches() {
     fi
   done
 
+  mini_bar_ok "${total_all} branch ditemukan"
   local total_all=$(( ${#nd_names[@]} + 1 ))
 
   # ════════════════════════════════════════════════════════════════════════
   # FASE 2 — Ambil tanggal commit semua branch secara PARALEL
   # ════════════════════════════════════════════════════════════════════════
-  echo -e "  ${C_DIM}▸ [2/3] Mengambil tanggal branch (paralel)...${C_RESET}"
+  mini_bar_start "[2/3] Ambil tanggal commit (paralel) ..." 0.04
 
   local total_nd=${#nd_names[@]}
   local def_date="" def_rel="-" def_msg="-"
@@ -2345,6 +3297,7 @@ action_list_branches() {
       "https://api.github.com/repos/${USER}/${REPO}/git/commits/${sha}" 2>/dev/null &
   done
   wait
+  mini_bar_ok "Data commit siap"
 
   _slb_parse_date() {
     grep -oE '"date"[[:space:]]*:[[:space:]]*"[^"]*"' "$1" | head -1 \
@@ -2794,7 +3747,7 @@ action_create_repo() {
 
   # ── Kirim ke GitHub API ─────────────────────────────────────────────────
   echo ""
-  echo -e "  ${C_DIM}▸ Membuat repository di GitHub...${C_RESET}"
+  mini_bar2_start "Membuat repository di GitHub ..." "Kirim POST ke GitHub API..." 0.05
 
   local resp http_code
   resp=$(curl -s -w "\n%{http_code}" \
@@ -2807,6 +3760,14 @@ action_create_repo() {
     "https://api.github.com/user/repos" 2>/dev/null)
 
   http_code=$(printf '%s' "$resp" | tail -1)
+  relogin_if_needed "$http_code" "buat repo" || return
+  if [ "$http_code" = "201" ]; then
+    mini_bar2_ok "Repository dibuat" "${USER}/${new_repo_name} berhasil dibuat ✓"
+  else
+    local _cr_err
+    _cr_err=$(printf '%s' "$resp" | sed '$d' | grep -oE '"message"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"message"[[:space:]]*:[[:space:]]*"//;s/".*//')
+    mini_bar2_fail "Gagal HTTP ${http_code}" "${_cr_err:-error dari GitHub API}"
+  fi
   local body
   body=$(printf '%s' "$resp" | sed '$d')
 
@@ -3012,7 +3973,7 @@ action_import_repo() {
 
   # ── Langkah 1: Buat repo kosong dulu ────────────────────────────────────
   echo ""
-  echo -e "  ${C_DIM}▸ [1/2] Membuat repository kosong...${C_RESET}"
+  mini_bar2_start "[1/2] Membuat repo kosong ..." "Kirim POST ke GitHub API..." 0.05
   local create_resp create_code
   local name_esc
   name_esc=$(printf '%s' "$imp_repo_name" | sed 's/\\/\\\\/g;s/"/\\"/g')
@@ -3030,6 +3991,14 @@ action_import_repo() {
   local create_body
   create_body=$(printf '%s' "$create_resp" | sed '$d')
 
+  relogin_if_needed "$create_code" "buat repo import" || return
+  if [ "$create_code" = "201" ]; then
+    mini_bar2_ok "Repo kosong dibuat" "${USER}/${imp_repo_name} siap untuk import ✓"
+  else
+    local _ic_err
+    _ic_err=$(printf '%s' "$create_body" | grep -oE '"message"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"message"[[:space:]]*:[[:space:]]*"//;s/".*//')
+    mini_bar2_fail "Gagal buat repo HTTP ${create_code}" "${_ic_err:-error dari GitHub API}"
+  fi
   if [ "$create_code" != "201" ]; then
     local cerr
     cerr=$(printf '%s' "$create_body" \
@@ -3048,7 +4017,7 @@ action_import_repo() {
   fi
 
   # ── Langkah 2: Mulai import ──────────────────────────────────────────────
-  echo -e "  ${C_DIM}▸ [2/2] Memulai import dari sumber...${C_RESET}"
+  mini_bar2_start "[2/2] Memulai import dari sumber ..." "Kirim PUT ke GitHub Importer API..." 0.05
 
   # Bangun payload import
   local src_url_esc
@@ -3074,6 +4043,15 @@ action_import_repo() {
   imp_code=$(printf '%s' "$imp_resp" | tail -1)
   local imp_body
   imp_body=$(printf '%s' "$imp_resp" | sed '$d')
+
+  relogin_if_needed "$imp_code" "mulai import" || return
+  if [ "$imp_code" = "201" ]; then
+    mini_bar2_ok "Import dimulai" "Proses berjalan di background GitHub ✓"
+  else
+    local _ii_err
+    _ii_err=$(printf '%s' "$imp_body" | grep -oE '"message"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"message"[[:space:]]*:[[:space:]]*"//;s/".*//')
+    mini_bar2_fail "Gagal mulai import HTTP ${imp_code}" "${_ii_err:-error dari GitHub API}"
+  fi
 
   # ── Tampilkan status awal + polling ─────────────────────────────────────
   clear >/dev/tty 2>/dev/null || true
@@ -3110,15 +4088,43 @@ action_import_repo() {
 ⏳ ${imp_status:-importing}
 🕐 ${_ts_ir}" "$_btn_ir" 2>/dev/null &
     echo ""
-    # ── Polling status sampai selesai atau error ─────────────────────────
-    echo -e "  ${C_DIM}▸ Memantau progress import...${C_RESET}"
-    echo -e "  ${C_DIM}  (Ctrl+C untuk berhenti pantau, import tetap berjalan)${C_RESET}"
+    echo -e "  ${C_DIM}Memantau progress import...${C_RESET}"
+    echo -e "  ${C_DIM}(Ctrl+C untuk berhenti pantau, import tetap berjalan di GitHub)${C_RESET}"
     echo ""
-    local poll_count=0 poll_max=30
+    # ── Polling real-time dengan animasi bar ─────────────────────────────
+    local _poll_sf; _poll_sf=$(mktemp)
+    local _poll_pf; _poll_pf=$(mktemp)
+    printf "Memulai import..." > "$_poll_sf"
+    printf "0"                 > "$_poll_pf"
+    local _poll_bw=22
+
+    # Background: spinner + bar animasi terus, baca status dari temp file
+    {
+      local _psi=0
+      local _pspin=(⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏)
+      printf "\n" >/dev/tty 2>/dev/null
+      while true; do
+        local _ppct _pst _pbf="" _pbe="" _pj=0
+        _ppct=$(cat "$_poll_pf" 2>/dev/null); echo "$_ppct" | grep -qE '^[0-9]+$' || _ppct=0
+        _pst=$(tr -d '\n' < "$_poll_sf" 2>/dev/null | cut -c1-50)
+        local _pf=$(( _ppct * _poll_bw / 100 ))
+        while [ $_pj -lt $_pf ];       do _pbf="${_pbf}█"; _pj=$(( _pj+1 )); done
+        while [ $_pj -lt $_poll_bw ]; do _pbe="${_pbe}░"; _pj=$(( _pj+1 )); done
+        local _psp="${_pspin[$(( _psi % 10 ))]}"
+        printf "\033[2A\r\033[K  [\033[36m%s\033[0m\033[2m%s\033[0m] \033[1;36m%3d%%\033[0m  \033[2mImport berjalan...\033[0m\n\033[K  \033[36m%s\033[0m \033[2m%s\033[0m\n" \
+          "$_pbf" "$_pbe" "$_ppct" "$_psp" "$_pst" >/dev/tty 2>/dev/null
+        _psi=$(( _psi + 1 ))
+        sleep 0.15
+      done
+    } &
+    local _poll_spin_pid=$!
+
+    local poll_count=0 poll_max=75   # 75 × 4s = 5 menit
+    local _poll_final="" poll_text="" poll_status=""
     while [ "$poll_count" -lt "$poll_max" ]; do
       sleep 4
       poll_count=$(( poll_count + 1 ))
-      local poll_raw poll_status poll_text poll_pct
+      local poll_raw poll_pct
       poll_raw=$(curl -s \
         -H "Authorization: token ${TOKEN}" \
         -H "Accept: application/vnd.github+json" \
@@ -3134,55 +4140,59 @@ action_import_repo() {
         | grep -oE '"percent"[[:space:]]*:[[:space:]]*[0-9]+' | head -1 \
         | grep -oE '[0-9]+$')
 
-      # Tampilkan baris status
-      local bar=""
-      if [ -n "$poll_pct" ] && [ "$poll_pct" -ge 0 ] 2>/dev/null; then
-        local filled=$(( poll_pct / 5 ))   # bar 20 karakter
-        local empty=$(( 20 - filled ))
-        bar="["
-        for (( _i=0; _i<filled; _i++ )); do bar="${bar}█"; done
-        for (( _i=0; _i<empty;  _i++ )); do bar="${bar}░"; done
-        bar="${bar}] ${poll_pct}%"
-      fi
+      # Update file untuk spinner
+      printf '%s' "${poll_text:-${poll_status:-importing}}" > "$_poll_sf"
+      [ -n "$poll_pct" ] && printf '%s' "$poll_pct" > "$_poll_pf"
 
       case "$poll_status" in
         complete)
-          echo -e "  ${C_GREEN}✅ Import selesai!${C_RESET}"
-          echo ""
-          printf "  ${C_DIM}URL    ${C_RESET}${C_CYAN}https://github.com/%s/%s${C_RESET}\n" \
-            "$USER" "$imp_repo_name"
-          echo ""
-          break
-          ;;
-        error|authentication_failed|error_stash_import)
-          echo -e "  ${C_RED}❌ Import gagal: ${poll_status}${C_RESET}"
-          [ -n "$poll_text" ] && echo -e "  ${C_RED}   ${poll_text}${C_RESET}"
-          echo ""
-          break
-          ;;
-        auth_failed)
-          echo -e "  ${C_RED}❌ Autentikasi sumber gagal.${C_RESET}"
-          echo -e "  ${C_YELLOW}💡 Coba lagi dengan username/password yang benar.${C_RESET}"
-          echo ""
-          break
-          ;;
-        *)
-          # Masih berjalan — tampilkan satu baris progress
-          local st_disp="${poll_status:-importing}"
-          [ -n "$poll_text" ] && st_disp="$poll_text"
-          if [ -n "$bar" ]; then
-            printf "  ${C_CYAN}%s${C_RESET}  %s\n" "$bar" "$st_disp"
-          else
-            printf "  ${C_DIM}[%2d]${C_RESET} ${C_CYAN}%s${C_RESET}\n" "$poll_count" "$st_disp"
-          fi
-          ;;
+          _poll_final="complete"; break ;;
+        error|authentication_failed|error_stash_import|auth_failed)
+          _poll_final="$poll_status"; break ;;
       esac
     done
-    if [ "$poll_count" -ge "$poll_max" ]; then
-      echo -e "  ${C_YELLOW}⚠️  Import masih berjalan di background.${C_RESET}"
-      printf "  ${C_DIM}Cek di  ${C_RESET}${C_CYAN}https://github.com/%s/%s${C_RESET}\n" \
-        "$USER" "$imp_repo_name"
+
+    # Hentikan spinner background
+    kill "$_poll_spin_pid" 2>/dev/null; wait "$_poll_spin_pid" 2>/dev/null
+
+    # Gambar state akhir in-place
+    if [ "$_poll_final" = "complete" ]; then
+      local _pfull="" _pj2=0
+      while [ $_pj2 -lt $_poll_bw ]; do _pfull="${_pfull}█"; _pj2=$(( _pj2+1 )); done
+      printf "\033[2A\r\033[K  [\033[32m%s\033[0m] \033[1;32m100%%\033[0m  \033[32m✅ Import selesai!\033[0m\n\033[K  \033[32m   https://github.com/%s/%s\033[0m\n" \
+        "$_pfull" "$USER" "$imp_repo_name" >/dev/tty 2>/dev/null
+      echo ""
+      local _ts_ir2; _ts_ir2=$(date '+%H:%M:%S %d %b %Y')
+      local _btn_ir2='{"inline_keyboard":[[{"text":"📁 Buka Repo","url":"https://github.com/'"${USER}"'/'"${imp_repo_name}"'"},{"text":"📋 Issues","url":"https://github.com/'"${USER}"'/'"${imp_repo_name}"'/issues"}],[{"text":"🌿 Branches","url":"https://github.com/'"${USER}"'/'"${imp_repo_name}"'/branches"},{"text":"📊 Commits","url":"https://github.com/'"${USER}"'/'"${imp_repo_name}"'/commits"}]]}'
+      send_telegram_photo "https://cdn.myanimelist.net/images/anime/1517/100633.jpg" "📥 <b>IMPORT REPO SELESAI</b>
+━━━━━━━━━━━━━━━━━━━━
+👤 <code>${USER}</code>
+📁 <code>${USER}/${imp_repo_name}</code>
+🔗 github.com/${USER}/${imp_repo_name}
+✅ Import berhasil 100%
+🕐 ${_ts_ir2}" "$_btn_ir2" 2>/dev/null &
+    elif [ -n "$_poll_final" ]; then
+      local _phalf="" _phbe="" _pj3=0
+      while [ $_pj3 -lt $(( _poll_bw * 9 / 10 )) ]; do _phalf="${_phalf}▒"; _pj3=$(( _pj3+1 )); done
+      while [ $_pj3 -lt $_poll_bw ]; do _phbe="${_phbe}░"; _pj3=$(( _pj3+1 )); done
+      printf "\033[2A\r\033[K  [\033[31m%s\033[0m\033[2m%s\033[0m] \033[1;31m ERR\033[0m  \033[31m❌ Import gagal: %s\033[0m\n\033[K  \033[31m   %s\033[0m\n" \
+        "$_phalf" "$_phbe" "$_poll_final" "${poll_text:-cek repo di GitHub}" >/dev/tty 2>/dev/null
+      echo ""
+      [ "$_poll_final" = "auth_failed" ] || [ "$_poll_final" = "authentication_failed" ] && \
+        echo -e "  ${C_YELLOW}💡 Coba lagi dengan username/password sumber yang benar.${C_RESET}"
+    else
+      # Timeout — import masih jalan tapi pantau dihentikan
+      local _ptpct; _ptpct=$(cat "$_poll_pf" 2>/dev/null || echo "0")
+      echo "$_ptpct" | grep -qE '^[0-9]+$' || _ptpct=0
+      local _ptbf="" _ptbe="" _ptj=0
+      local _ptf=$(( _ptpct * _poll_bw / 100 ))
+      while [ $_ptj -lt $_ptf ];       do _ptbf="${_ptbf}█"; _ptj=$(( _ptj+1 )); done
+      while [ $_ptj -lt $_poll_bw ]; do _ptbe="${_ptbe}░"; _ptj=$(( _ptj+1 )); done
+      printf "\033[2A\r\033[K  [\033[33m%s\033[0m\033[2m%s\033[0m] \033[1;33m%3d%%\033[0m  \033[33m⚠️  Timeout pantau (5 menit)\033[0m\n\033[K  \033[33m   Cek manual: github.com/%s/%s\033[0m\n" \
+        "$_ptbf" "$_ptbe" "$_ptpct" "$USER" "$imp_repo_name" >/dev/tty 2>/dev/null
+      echo ""
     fi
+    rm -f "$_poll_sf" "$_poll_pf" 2>/dev/null
   else
     local ierr
     ierr=$(printf '%s' "$imp_body" \
@@ -3324,7 +4334,7 @@ action_delete_repo() {
   echo ""
 
   # ── Ambil info repo dulu dari API ───────────────────────────────────────
-  echo -e "  ${C_DIM}▸ Mengambil info repository...${C_RESET}"
+  mini_bar2_start "Mengambil info repository ..." "Fetch dari GitHub API..." 0.05
   local info_raw info_code
   info_raw=$(curl -s -w "\n%{http_code}" \
     -H "Authorization: token ${TOKEN}" \
@@ -3335,6 +4345,12 @@ action_delete_repo() {
   local info_body
   info_body=$(printf '%s' "$info_raw" | sed '$d')
 
+  relogin_if_needed "$info_code" "ambil info repo" || return
+  if [ "$info_code" = "200" ]; then
+    mini_bar2_ok "Info repo didapat" "${del_owner}/${del_repo} ditemukan ✓"
+  else
+    mini_bar2_fail "Gagal HTTP ${info_code}" "Tidak bisa ambil info dari GitHub API"
+  fi
   if [ "$info_code" = "404" ]; then
     echo -e "  ${C_RED}❌ Repository '${del_owner}/${del_repo}' tidak ditemukan.${C_RESET}"
     echo ""
@@ -3472,7 +4488,7 @@ action_delete_repo() {
 
   # ── Eksekusi hapus via API ───────────────────────────────────────────────
   echo ""
-  echo -e "  ${C_DIM}▸ Menghapus ${del_owner}/${del_repo}...${C_RESET}"
+  mini_bar2_start "Menghapus ${del_owner}/${del_repo} ..." "Kirim DELETE ke GitHub API..." 0.05
   local del_resp del_code
   del_resp=$(curl -s -w "\n%{http_code}" \
     -X DELETE \
@@ -3481,6 +4497,11 @@ action_delete_repo() {
     -H "X-GitHub-Api-Version: 2022-11-28" \
     "https://api.github.com/repos/${del_owner}/${del_repo}" 2>/dev/null)
   del_code=$(printf '%s' "$del_resp" | tail -1)
+  if [ "$del_code" = "204" ]; then
+    mini_bar2_ok "Repository dihapus" "${del_owner}/${del_repo} sudah dihapus permanen"
+  else
+    mini_bar2_fail "Gagal hapus HTTP ${del_code}" "Cek token scope: delete_repo"
+  fi
 
   clear >/dev/tty 2>/dev/null || true
   echo -e "${C_BOLD}╭──────────────────────────────────╮${C_RESET}"
@@ -3553,7 +4574,7 @@ action_list_repos() {
     echo -e "${C_BOLD}│   📋  SEMUA REPOSITORY            │${C_RESET}"
     echo -e "${C_BOLD}╰──────────────────────────────────╯${C_RESET}"
     echo ""
-    echo -e "  ${C_DIM}▸ Mengambil data dari GitHub...${C_RESET}"
+    mini_bar_start "Mengambil data repo dari GitHub ..." 0.05
 
     # Ambil total count dulu (per_page=1 untuk efisiensi)
     local count_raw total_count=0
@@ -3587,6 +4608,8 @@ action_list_repos() {
     local body
     body=$(printf '%s' "$raw_resp" | sed '$d')
 
+    relogin_if_needed "$http_code" "ambil daftar repo" || continue
+    if [ "$http_code" = "200" ]; then mini_bar_ok "Data repo dimuat"; else mini_bar_fail "HTTP ${http_code}"; fi
     if [ "$http_code" != "200" ]; then
       clear >/dev/tty 2>/dev/null || true
       echo -e "${C_BOLD}╭──────────────────────────────────╮${C_RESET}"
@@ -3791,12 +4814,18 @@ action_rename_branch() {
   echo -e "${C_BOLD}╭──────────────────────────────────╮${C_RESET}"
   echo -e "${C_BOLD}│   ✏️   EDIT NAMA BRANCH          │${C_RESET}"
   echo -e "${C_BOLD}╰──────────────────────────────────╯${C_RESET}"
-  echo -e "  ${C_DIM}▸ Memuat branch (terbaru dulu)...${C_RESET}"
-
+  _MB_SUB_FILE=$(mktemp)
+  printf "Menghubungi GitHub API..." > "$_MB_SUB_FILE"
+  mini_bar2_start "Memuat daftar branch ..." "Menghubungi GitHub API..." 0.06
   local branches=()
   while IFS= read -r b; do
-    [ -n "$b" ] && branches+=("$b")
+    if [ -n "$b" ]; then
+      branches+=("$b")
+      printf "${#branches[@]} branch ditemukan..." > "$_MB_SUB_FILE"
+    fi
   done < <(fetch_branches_recent)
+  rm -f "$_MB_SUB_FILE" 2>/dev/null; _MB_SUB_FILE=""
+  mini_bar2_ok "Daftar branch siap" "${#branches[@]} branch tersedia ✓"
 
   local total=${#branches[@]}
   if [ "$total" -eq 0 ]; then
@@ -3930,14 +4959,14 @@ action_rename_branch() {
   echo -e "  ${C_DIM}${old_name}${C_RESET} ${C_BOLD}→${C_RESET} ${C_GREEN}${new_name}${C_RESET}"
   echo ""
   echo -e "${C_DIM}  ──────────────────────────────────${C_RESET}"
-  echo -e "  ${C_GREEN}1${C_RESET} ${C_BOLD}›${C_RESET} Lanjut rename"
-  echo -e "  ${C_RED}0${C_RESET} ${C_BOLD}›${C_RESET} Batal"
+  echo -e "  ${C_GREEN}y${C_RESET} ${C_BOLD}›${C_RESET} Lanjut rename      ${C_RED}n${C_RESET} ${C_BOLD}›${C_RESET} Batal"
   echo -e "${C_DIM}  ──────────────────────────────────${C_RESET}"
   printf "  ${C_BOLD}▸ ${C_RESET}"
 
   local confirm
-  read -r confirm
-  if [ "$confirm" != "1" ]; then
+  read -r confirm </dev/tty
+  confirm=$(printf '%s' "$confirm" | tr '[:upper:]' '[:lower:]' | tr -d ' \r\n')
+  if [ "$confirm" != "y" ]; then
     echo -e "  ${C_YELLOW}↩ Dibatalkan.${C_RESET}"
     sleep 1
     return
@@ -3945,7 +4974,7 @@ action_rename_branch() {
 
   # ── Panggil GitHub API: POST /repos/{owner}/{repo}/branches/{branch}/rename ──
   echo ""
-  echo -e "  ${C_CYAN}▸${C_RESET} Menghubungi GitHub API untuk rename branch..."
+  mini_bar2_start "Rename branch ..." "Kirim POST ke GitHub API..." 0.05
 
   local api_http
   api_http=$(curl -s -o /tmp/_gh_renbranch.json -w "%{http_code}" \
@@ -3957,6 +4986,7 @@ action_rename_branch() {
     -d "{\"new_name\":\"${new_name}\"}" 2>/dev/null)
 
   if [ "$api_http" = "201" ]; then
+    mini_bar2_ok "Branch di-rename" "${old_name} → ${new_name} ✓"
     echo ""
     echo -e "  ${C_GREEN}✅ Branch berhasil di-rename di GitHub!${C_RESET}"
     echo -e "  ${C_DIM}${old_name}${C_RESET} ${C_BOLD}→${C_RESET} ${C_GREEN}${new_name}${C_RESET}"
@@ -3980,6 +5010,7 @@ action_rename_branch() {
     local api_msg
     api_msg=$(grep -o '"message": *"[^"]*"' /tmp/_gh_renbranch.json 2>/dev/null \
       | head -1 | sed 's/"message": *"//;s/"//')
+    mini_bar2_fail "Gagal HTTP ${api_http}" "${api_msg:-error dari GitHub API}"
     echo ""
     echo -e "  ${C_RED}❌ Gagal rename branch (HTTP ${api_http})${C_RESET}"
     [ -n "$api_msg" ] && echo -e "  ${C_DIM}   GitHub: ${api_msg}${C_RESET}"
@@ -4011,8 +5042,8 @@ action_create_branch() {
   echo -e "${C_DIM}  ──────────────────────────────────${C_RESET}"
   printf "  ${C_BOLD}Nama branch baru ▸ ${C_RESET}"
   local name
-  read -r name
-  name=$(echo "$name" | tr -d '[:space:]')
+  read -r name </dev/tty
+  name=$(printf '%s' "$name" | tr -d '[:space:]\r\n')
 
   if [ -z "$name" ] || [ "$name" = "0" ]; then
     echo -e "${C_YELLOW}↩ Kembali ke menu.${C_RESET}"
@@ -4028,6 +5059,7 @@ action_create_branch() {
   fi
 
   # Cek apakah branch sudah ada via GitHub API
+  mini_bar2_start "Cek nama branch ..." "Verifikasi ke GitHub API..." 0.015
   local chk_http
   chk_http=$(curl -s -o /dev/null -w "%{http_code}" \
     -H "Authorization: token ${TOKEN}" \
@@ -4036,43 +5068,38 @@ action_create_branch() {
     "https://api.github.com/repos/${USER}/${REPO}/git/ref/heads/${name}" \
     2>/dev/null)
   if [ "$chk_http" = "200" ]; then
-    echo -e "${C_RED}✖ Branch '${name}' sudah ada di GitHub.${C_RESET}"
+    mini_bar2_fail "Branch sudah ada" "Branch '${name}' sudah exist di GitHub"
     sleep 2
     return
   fi
-
-  echo ""
-  echo -e "  ${C_CYAN}▸${C_RESET} ambil SHA dari ${DEFAULT_BRANCH}..."
+  mini_bar2_ok "Nama tersedia" "Branch '${name}' belum ada ✓"
 
   # Ambil SHA tip dari DEFAULT_BRANCH via GitHub API (tidak butuh switch branch lokal)
-  local sha_resp sha_http sha
+  mini_bar2_start "Ambil SHA ${DEFAULT_BRANCH} ..." "Fetch commit terbaru dari remote..." 0.015
+  local sha_resp sha
   sha_resp=$(curl -s -o /tmp/_gh_sha.json -w "%{http_code}" \
     -H "Authorization: token ${TOKEN}" \
     -H "Accept: application/vnd.github+json" \
     -H "X-GitHub-Api-Version: 2022-11-28" \
     "https://api.github.com/repos/${USER}/${REPO}/git/ref/heads/${DEFAULT_BRANCH}" \
     2>/dev/null)
-
   if [ "$sha_resp" != "200" ]; then
-    echo -e "${C_RED}✖ Gagal ambil SHA branch ${DEFAULT_BRANCH} (HTTP ${sha_resp})${C_RESET}"
+    mini_bar2_fail "Gagal ambil SHA" "HTTP ${sha_resp} dari GitHub"
     rm -f /tmp/_gh_sha.json
     sleep 2
     return
   fi
-
   sha=$(grep -o '"sha": *"[^"]*"' /tmp/_gh_sha.json | head -1 | sed 's/"sha": *"//;s/"//')
   rm -f /tmp/_gh_sha.json
-
   if [ -z "$sha" ]; then
-    echo -e "${C_RED}✖ SHA tidak ditemukan dari response GitHub${C_RESET}"
+    mini_bar2_fail "Gagal ambil SHA" "SHA tidak ada di response GitHub"
     sleep 2
     return
   fi
+  mini_bar2_ok "SHA didapat" "${sha:0:7} ← ${DEFAULT_BRANCH}"
 
-  echo -e "  ${C_DIM}   SHA: ${sha:0:10}...${C_RESET}"
-  echo -e "  ${C_CYAN}▸${C_RESET} bikin branch ${C_BOLD}${name}${C_RESET} via GitHub API..."
-
-  # Buat branch di GitHub via API — tanpa perlu git checkout lokal
+  # Buat branch di GitHub via API
+  mini_bar2_start "Buat branch ${name} ..." "Kirim POST ke GitHub API..." 0.02
   local create_http
   create_http=$(curl -s -o /tmp/_gh_create.json -w "%{http_code}" \
     -X POST \
@@ -4082,27 +5109,42 @@ action_create_branch() {
     "https://api.github.com/repos/${USER}/${REPO}/git/refs" \
     -d "{\"ref\":\"refs/heads/${name}\",\"sha\":\"${sha}\"}" \
     2>/dev/null)
+  if [ "$create_http" != "201" ]; then
+    local api_msg
+    api_msg=$(grep -o '"message": *"[^"]*"' /tmp/_gh_create.json 2>/dev/null | head -1 | sed 's/"message": *"//;s/"//')
+    mini_bar2_fail "Gagal buat branch" "HTTP ${create_http}${api_msg:+ — ${api_msg}}"
+    rm -f /tmp/_gh_create.json
+    prompt_back_or_exit
+    return
+  fi
+  mini_bar2_ok "Branch dibuat" "${USER}/${REPO} → ${name} ✓"
 
-  if [ "$create_http" = "201" ]; then
-    echo ""
-    echo -e "  ${C_GREEN}🎉 Branch '${name}' berhasil dibuat di GitHub!${C_RESET}"
-    echo -e "  ${C_BLUE}🔗 https://github.com/${USER}/${REPO}/tree/${name}${C_RESET}"
-    local _ts_cb; _ts_cb=$(date '+%H:%M:%S %d %b %Y')
-    local _btn_cb='{"inline_keyboard":[[{"text":"🌿 Lihat Branch","url":"https://github.com/'"${USER}"'/'"${REPO}"'/tree/'"${name}"'"},{"text":"🔀 Buat PR","url":"https://github.com/'"${USER}"'/'"${REPO}"'/compare/'"${name}"'"}],[{"text":"📁 Repo","url":"https://github.com/'"${USER}"'/'"${REPO}"'"},{"text":"📊 Commits","url":"https://github.com/'"${USER}"'/'"${REPO}"'/commits/'"${name}"'"}]]}'
-    send_telegram_photo "https://w.wallhaven.cc/full/x1/wallhaven-x1ppvz.jpg" "🌱 <b>BRANCH BARU DIBUAT</b>
+  rm -f /tmp/_gh_create.json
+  echo -e "  ${C_GREEN}✅ Branch '${C_BOLD}${name}${C_RESET}${C_GREEN}' berhasil dibuat!${C_RESET}"
+  echo ""
+
+  # ── Push file lokal terkini ke branch baru ──────────────────────────────
+  echo -e "${C_BOLD}📤 Upload file lokal ke branch baru...${C_RESET}"
+  echo -e "  ${C_DIM}(aturan gitignore berlaku — sama seperti upload biasa)${C_RESET}"
+  echo ""
+
+  SELECTED_BRANCHES=("$name")
+  if ! commit_pending_changes; then
+    echo -e "  ${C_YELLOW}⚠️  Tidak ada perubahan baru untuk di-commit.${C_RESET}"
+  fi
+
+  push_head_to_branch "$name"
+
+  local _ts_cb; _ts_cb=$(date '+%H:%M:%S %d %b %Y')
+  local _btn_cb='{"inline_keyboard":[[{"text":"🌿 Lihat Branch","url":"https://github.com/'"${USER}"'/'"${REPO}"'/tree/'"${name}"'"},{"text":"🔀 Buat PR","url":"https://github.com/'"${USER}"'/'"${REPO}"'/compare/'"${name}"'"}],[{"text":"📁 Repo","url":"https://github.com/'"${USER}"'/'"${REPO}"'"},{"text":"📊 Commits","url":"https://github.com/'"${USER}"'/'"${REPO}"'/commits/'"${name}"'"}]]}'
+  send_telegram_photo "https://w.wallhaven.cc/full/x1/wallhaven-x1ppvz.jpg" "🌱 <b>BRANCH BARU DIBUAT + PUSH</b>
 ━━━━━━━━━━━━━━━━━━━━
 📁 <code>${USER}/${REPO}</code>
 🌿 Branch baru: <code>${name}</code>
+📤 File lokal sudah ter-upload
 🔗 github.com/${USER}/${REPO}/tree/${name}
 ━━━━━━━━━━━━━━━━━━━━
 🕐 ${_ts_cb}" "$_btn_cb" 2>/dev/null &
-  else
-    local api_msg
-    api_msg=$(grep -o '"message": *"[^"]*"' /tmp/_gh_create.json 2>/dev/null | head -1 | sed 's/"message": *"//;s/"//')
-    echo -e "  ${C_RED}❌ Gagal buat branch (HTTP ${create_http})${C_RESET}"
-    [ -n "$api_msg" ] && echo -e "  ${C_DIM}   GitHub: ${api_msg}${C_RESET}"
-  fi
-  rm -f /tmp/_gh_create.json
 
   prompt_back_or_exit
 }
@@ -4116,12 +5158,15 @@ action_delete_branch() {
   echo -e "${C_BOLD}╭──────────────────────────────────╮${C_RESET}"
   echo -e "${C_BOLD}│   🗑️   HAPUS BRANCH              │${C_RESET}"
   echo -e "${C_BOLD}╰──────────────────────────────────╯${C_RESET}"
-  echo -e "  ${C_DIM}▸ Memuat branch (terbaru dulu)...${C_RESET}"
-
+  _MB_SUB_FILE=$(mktemp)
+  printf "Menghubungi GitHub API..." > "$_MB_SUB_FILE"
+  mini_bar2_start "Memuat daftar branch ..." "Menghubungi GitHub API..." 0.06
   local branches=()
   while IFS= read -r b; do
     [ -n "$b" ] && [ "$b" != "$DEFAULT_BRANCH" ] && branches+=("$b")
   done < <(fetch_branches_recent)
+  rm -f "$_MB_SUB_FILE" 2>/dev/null; _MB_SUB_FILE=""
+  mini_bar2_ok "Daftar branch siap" "${#branches[@]} branch tersedia ✓"
 
   local total=${#branches[@]}
 
@@ -4254,14 +5299,14 @@ action_delete_branch() {
   done
   echo ""
   echo -e "${C_DIM}  ──────────────────────────────────${C_RESET}"
-  echo -e "  ${C_GREEN}1${C_RESET} ${C_BOLD}›${C_RESET} Lanjut hapus"
-  echo -e "  ${C_RED}0${C_RESET} ${C_BOLD}›${C_RESET} Batal"
+  echo -e "  ${C_GREEN}y${C_RESET} ${C_BOLD}›${C_RESET} Lanjut hapus      ${C_RED}n${C_RESET} ${C_BOLD}›${C_RESET} Batal"
   echo -e "${C_DIM}  ──────────────────────────────────${C_RESET}"
   printf "  ${C_BOLD}▸ ${C_RESET}"
   local confirm
-  read -r confirm
+  read -r confirm </dev/tty
+  confirm=$(printf '%s' "$confirm" | tr '[:upper:]' '[:lower:]' | tr -d ' \r\n')
 
-  if [ "$confirm" != "1" ]; then
+  if [ "$confirm" != "y" ]; then
     echo -e "${C_YELLOW}↩ Dibatalkan, kembali ke menu.${C_RESET}"
     sleep 1
     return
@@ -4321,104 +5366,137 @@ action_delete_branch() {
 }
 
 # ===== Menu pemilih branch (sub-menu dari opsi 1) =====
+# Branch dimuat SEKALI, navigasi n/p/f/l langsung in-place tanpa re-fetch.
 show_menu() {
   local _SM_PAGE="${_SM_PAGE:-1}"
   local _SM_PAGE_SIZE=8
 
+  # ── Load branch hanya sekali di sini ──────────────────────────────────────
   clear >/dev/tty 2>/dev/null || true
   echo -e "${C_BOLD}╭──────────────────────────────────╮${C_RESET}"
   echo -e "${C_BOLD}│   📤  UPLOAD — PILIH BRANCH      │${C_RESET}"
   echo -e "${C_BOLD}╰──────────────────────────────────╯${C_RESET}"
-  echo -e "  ${C_DIM}▸ Memuat branch (terbaru dulu)...${C_RESET}"
-
+  _MB_SUB_FILE=$(mktemp)
+  printf "Menghubungi GitHub API..." > "$_MB_SUB_FILE"
+  mini_bar2_start "Memuat daftar branch ..." "Menghubungi GitHub API..." 0.06
   local branches=()
   while IFS= read -r b; do
-    [ -n "$b" ] && branches+=("$b")
+    if [ -n "$b" ]; then
+      branches+=("$b")
+      printf "${#branches[@]} branch ditemukan..." > "$_MB_SUB_FILE"
+    fi
   done < <(fetch_branches_recent)
+  rm -f "$_MB_SUB_FILE" 2>/dev/null; _MB_SUB_FILE=""
+  mini_bar2_ok "Daftar branch siap" "${#branches[@]} branch tersedia ✓"
 
   local total=${#branches[@]}
   local total_pages=$(( (total + _SM_PAGE_SIZE - 1) / _SM_PAGE_SIZE ))
   [ "$total_pages" -eq 0 ] && total_pages=1
-  [ "$_SM_PAGE" -gt "$total_pages" ] && _SM_PAGE=$total_pages
-  [ "$_SM_PAGE" -lt 1 ] && _SM_PAGE=1
 
-  local start=$(( (_SM_PAGE - 1) * _SM_PAGE_SIZE ))
-  local end=$(( start + _SM_PAGE_SIZE ))
-  [ "$end" -gt "$total" ] && end="$total"
+  # ── Inner loop: navigasi in-place, TIDAK re-fetch ─────────────────────────
+  local _sm_err=""
+  while true; do
+    [ "$_SM_PAGE" -gt "$total_pages" ] && _SM_PAGE=$total_pages
+    [ "$_SM_PAGE" -lt 1 ]             && _SM_PAGE=1
 
-  clear >/dev/tty 2>/dev/null || true
-  echo -e "${C_BOLD}╭──────────────────────────────────╮${C_RESET}"
-  echo -e "${C_BOLD}│   📤  UPLOAD — PILIH BRANCH      │${C_RESET}"
-  echo -e "${C_BOLD}╰──────────────────────────────────╯${C_RESET}"
-  echo ""
-  echo -e "  ${C_DIM}repo  ${C_RESET}${C_BOLD}${USER}/${REPO}${C_RESET}"
-  if [ "$total_pages" -gt 1 ]; then
-    local _range_end_disp=$(( end ))
-    echo -e "  ${C_DIM}posisi${C_RESET} ${C_BOLD}$(( start + 1 ))–${_range_end_disp}${C_RESET}${C_DIM} dari ${total} branch  •  hal ${_SM_PAGE}/${total_pages}${C_RESET}"
-  else
-    echo -e "  ${C_DIM}total ${C_RESET}${C_BOLD}${total} branch${C_RESET}"
-  fi
-  echo ""
-  echo -e "${C_DIM}  ──────────────────────────────────${C_RESET}"
+    local start=$(( (_SM_PAGE - 1) * _SM_PAGE_SIZE ))
+    local end=$(( start + _SM_PAGE_SIZE ))
+    [ "$end" -gt "$total" ] && end="$total"
 
-  for (( i=start; i<end; i++ )); do
-    local b="${branches[$i]}"
-    local num=$(( i + 1 ))
-    if [ "$b" = "$DEFAULT_BRANCH" ]; then
-      printf "  ${C_GREEN}%2d${C_RESET} ${C_BOLD}›${C_RESET} %s  ${C_DIM}(default)${C_RESET}\n" "$num" "$b"
+    clear >/dev/tty 2>/dev/null || true
+    echo -e "${C_BOLD}╭──────────────────────────────────╮${C_RESET}"
+    echo -e "${C_BOLD}│   📤  UPLOAD — PILIH BRANCH      │${C_RESET}"
+    echo -e "${C_BOLD}╰──────────────────────────────────╯${C_RESET}"
+    echo ""
+    echo -e "  ${C_DIM}repo  ${C_RESET}${C_BOLD}${USER}/${REPO}${C_RESET}"
+    if [ "$total_pages" -gt 1 ]; then
+      echo -e "  ${C_DIM}posisi${C_RESET} ${C_BOLD}$(( start + 1 ))–${end}${C_RESET}${C_DIM} dari ${total} branch  •  hal ${_SM_PAGE}/${total_pages}${C_RESET}"
     else
-      printf "  ${C_CYAN}%2d${C_RESET} ${C_BOLD}›${C_RESET} %s\n" "$num" "$b"
+      echo -e "  ${C_DIM}total ${C_RESET}${C_BOLD}${total} branch${C_RESET}"
     fi
+    echo ""
+    echo -e "${C_DIM}  ──────────────────────────────────${C_RESET}"
+
+    local i
+    for (( i=start; i<end; i++ )); do
+      local b="${branches[$i]}"
+      local num=$(( i + 1 ))
+      if [ "$b" = "$DEFAULT_BRANCH" ]; then
+        printf "  ${C_GREEN}%2d${C_RESET} ${C_BOLD}›${C_RESET} %s  ${C_DIM}(default)${C_RESET}\n" "$num" "$b"
+      else
+        printf "  ${C_CYAN}%2d${C_RESET} ${C_BOLD}›${C_RESET} %s\n" "$num" "$b"
+      fi
+    done
+
+    echo -e "${C_DIM}  ──────────────────────────────────${C_RESET}"
+    if [ "$total_pages" -gt 1 ]; then
+      local _nav=""
+      [ "$_SM_PAGE" -lt "$total_pages" ] && _nav="${_nav}  ${C_CYAN}n${C_RESET} › Berikutnya"
+      [ "$_SM_PAGE" -gt 1 ]              && _nav="${_nav}   ${C_CYAN}p${C_RESET} › Sebelumnya"
+      [ -n "$_nav" ] && echo -e "$_nav"
+      echo -e "  ${C_CYAN}f${C_RESET} › Awal   ${C_CYAN}l${C_RESET} › Akhir   ${C_DIM}h<angka> → loncat hal  (mis: h3)${C_RESET}"
+    fi
+    echo -e "  ${C_YELLOW} A${C_RESET} ${C_BOLD}›${C_RESET} Semua branch"
+    echo -e "  ${C_GREEN} D${C_RESET} ${C_BOLD}›${C_RESET} Default  ${C_DIM}(${DEFAULT_BRANCH})${C_RESET}"
+    echo -e "  ${C_RED} 0${C_RESET} ${C_BOLD}›${C_RESET} Kembali"
+    echo -e "${C_DIM}  ──────────────────────────────────${C_RESET}"
+    printf "  ${C_DIM}💡 Ketik nomor atau nama branch langsung${C_RESET}\n"
+    # Tampilkan error (jika ada) tepat di atas prompt, lalu hapus
+    [ -n "$_sm_err" ] && printf "  ${C_RED}✖ %s${C_RESET}\n" "$_sm_err"
+    _sm_err=""
+    printf "  ${C_BOLD}▸ ${C_RESET}"
+
+    local choice
+    read -r choice </dev/tty
+    choice=$(printf '%s' "${choice:-D}" | tr -d '\r\n')
+
+    case "$choice" in
+      n|N)
+        if [ "$_SM_PAGE" -lt "$total_pages" ]; then
+          _SM_PAGE=$(( _SM_PAGE + 1 ))
+        else
+          _sm_err="Sudah di halaman terakhir"
+        fi
+        ;;
+      p|P)
+        if [ "$_SM_PAGE" -gt 1 ]; then
+          _SM_PAGE=$(( _SM_PAGE - 1 ))
+        else
+          _sm_err="Sudah di halaman pertama"
+        fi
+        ;;
+      f|F) _SM_PAGE=1 ;;
+      l|L) _SM_PAGE=$total_pages ;;
+      h*|H*)
+        local _pg_jump="${choice:1}"
+        if echo "$_pg_jump" | grep -qE '^[0-9]+$' && [ "$_pg_jump" -ge 1 ] && [ "$_pg_jump" -le "$total_pages" ]; then
+          _SM_PAGE=$_pg_jump
+        else
+          _sm_err="Halaman tidak valid (1–${total_pages})"
+        fi
+        ;;
+      0|q|Q|exit) goodbye_prompt; return ;;
+      a|A) SELECTED_BRANCHES=("${branches[@]}"); return ;;
+      d|D|"") SELECTED_BRANCHES=("$DEFAULT_BRANCH"); return ;;
+      *)
+        if echo "$choice" | grep -qE '^[0-9]+$' && [ "$choice" -ge 1 ] && [ "$choice" -le "$total" ]; then
+          SELECTED_BRANCHES=("${branches[$((choice - 1))]}")
+          return
+        else
+          # Coba cocokkan nama branch langsung
+          local _found=0 _fb
+          for _fb in "${branches[@]}"; do
+            if [ "$_fb" = "$choice" ]; then
+              SELECTED_BRANCHES=("$_fb"); _found=1; break
+            fi
+          done
+          [ "$_found" -eq 1 ] && return
+          _sm_err="Pilihan tidak valid: '${choice}'"
+        fi
+        ;;
+    esac
+    # n/p/f/l/h/error → ulangi loop (redraw in-place, tidak re-fetch)
   done
-
-  echo -e "${C_DIM}  ──────────────────────────────────${C_RESET}"
-  if [ "$total_pages" -gt 1 ]; then
-    local _nav_line=""
-    [ "$_SM_PAGE" -lt "$total_pages" ] && _nav_line="${_nav_line}  ${C_CYAN}n${C_RESET} › Berikutnya"
-    [ "$_SM_PAGE" -gt 1 ]              && _nav_line="${_nav_line}   ${C_CYAN}p${C_RESET} › Sebelumnya"
-    [ -n "$_nav_line" ] && echo -e "$_nav_line"
-    echo -e "  ${C_CYAN}f${C_RESET} › Awal   ${C_CYAN}l${C_RESET} › Akhir   ${C_DIM}h<angka> → loncat hal  (mis: h3)${C_RESET}"
-  fi
-  echo -e "  ${C_YELLOW} A${C_RESET} ${C_BOLD}›${C_RESET} Semua branch"
-  echo -e "  ${C_GREEN} D${C_RESET} ${C_BOLD}›${C_RESET} Default  ${C_DIM}(${DEFAULT_BRANCH})${C_RESET}"
-  echo -e "  ${C_RED} 0${C_RESET} ${C_BOLD}›${C_RESET} Kembali"
-  echo -e "${C_DIM}  ──────────────────────────────────${C_RESET}"
-  printf "  ${C_BOLD}▸ ${C_RESET}"
-
-  local choice
-  read -r choice
-  choice="${choice:-D}"
-
-  case "$choice" in
-    n|N) _SM_PAGE=$(( _SM_PAGE < total_pages ? _SM_PAGE + 1 : _SM_PAGE )) show_menu; return ;;
-    p|P) _SM_PAGE=$(( _SM_PAGE > 1 ? _SM_PAGE - 1 : 1 )) show_menu; return ;;
-    f|F) _SM_PAGE=1 show_menu; return ;;
-    l|L) _SM_PAGE=$total_pages show_menu; return ;;
-    h*|H*)
-      local _pg_jump="${choice:1}"
-      if echo "$_pg_jump" | grep -qE '^[0-9]+$' && [ "$_pg_jump" -ge 1 ] && [ "$_pg_jump" -le "$total_pages" ]; then
-        _SM_PAGE=$_pg_jump show_menu
-      else
-        echo -e "  ${C_RED}✖ Halaman tidak valid${C_RESET} ${C_DIM}(1–${total_pages})${C_RESET}"
-        sleep 1
-        _SM_PAGE=$_SM_PAGE show_menu
-      fi
-      return
-      ;;
-    0|q|Q|exit) goodbye_prompt ;;
-    a|A) SELECTED_BRANCHES=("${branches[@]}") ;;
-    d|D|"") SELECTED_BRANCHES=("$DEFAULT_BRANCH") ;;
-    *)
-      if echo "$choice" | grep -qE '^[0-9]+$' && [ "$choice" -ge 1 ] && [ "$choice" -le "$total" ]; then
-        SELECTED_BRANCHES=("${branches[$((choice - 1))]}")
-      else
-        echo -e "  ${C_RED}✖ Pilihan tidak valid: '${choice}'${C_RESET}"
-        sleep 1
-        _SM_PAGE=$_SM_PAGE show_menu
-        return
-      fi
-      ;;
-  esac
 }
 
 # ===== Goodbye prompt (bisa balik cepat dengan ketik 1) =====
@@ -4489,7 +5567,13 @@ commit_pending_changes() {
   if [ "$has_staged" = "yes" ]; then
     local staged_total
     staged_total=$(git diff --cached --name-only 2>/dev/null | wc -l | tr -d ' ')
-    echo -e "  ${C_CYAN}▸${C_RESET} ${C_BOLD}${staged_total}${C_RESET} file di-stage, commit..."
+    echo -e "  ${C_CYAN}▸${C_RESET} ${C_BOLD}${staged_total}${C_RESET} file siap di-commit"
+
+    # Tampilkan preview file yang akan di-commit & minta konfirmasi.
+    if ! preview_staged_confirm; then
+      COMMIT_DONE="no"
+      return 1
+    fi
 
     local MSG
     if [ -n "$CUSTOM_MSG" ]; then
@@ -4498,11 +5582,12 @@ commit_pending_changes() {
       MSG=$(classify_commit)
     fi
 
+    mini_bar_start "Menyimpan commit ..." 0.006
     if ! git commit -q -m "$MSG" 2>/dev/null; then
-      echo -e "  ${C_RED}❌ git commit gagal${C_RESET}"
+      mini_bar_fail "git commit gagal"
       return 1
     fi
-    echo -e "  ${C_GREEN}✅${C_RESET} ${MSG}"
+    mini_bar_ok "${MSG}"
     COMMIT_DONE="yes"
   fi
 
@@ -4530,9 +5615,43 @@ push_head_to_branch() {
       echo -e "  ${C_GREEN}✅ Sudah up-to-date${C_RESET} → ${C_BLUE}https://github.com/${USER}/${REPO}/tree/${branch}${C_RESET}"
       return 0
     fi
+
+    # ── Deteksi konflik sebelum push ──────────────────────────────────────────
+    # Hitung berapa commit remote yang tidak ada di lokal (behind),
+    # dan berapa commit lokal yang belum di-push (ahead).
+    local _behind_count _ahead_count
+    _behind_count=$(git rev-list --count "HEAD..refs/remotes/origin/${branch}" 2>/dev/null || echo "0")
+    _ahead_count=$(git rev-list --count  "refs/remotes/origin/${branch}..HEAD"  2>/dev/null || echo "0")
+    # Bersihkan jadi angka murni, hindari error aritmatik
+    _behind_count=$(printf '%s' "$_behind_count" | tr -cd '0-9'); _behind_count="${_behind_count:-0}"
+    _ahead_count=$(printf '%s'  "$_ahead_count"  | tr -cd '0-9'); _ahead_count="${_ahead_count:-0}"
+
+    if [ "$_behind_count" -gt 0 ] 2>/dev/null; then
+      echo ""
+      echo -e "  ${C_YELLOW}⚠️  Remote ${C_BOLD}${branch}${C_RESET}${C_YELLOW} punya ${C_BOLD}${_behind_count}${C_RESET}${C_YELLOW} commit yang tidak ada di lokal${C_RESET}"
+      echo -e "  ${C_DIM}   Lokal : ↑${_ahead_count} commit belum di-push${C_RESET}"
+      echo -e "  ${C_DIM}   Remote: ↑${_behind_count} commit belum di-pull${C_RESET}"
+      echo ""
+      echo -e "  ${C_GREEN}f${C_RESET} › Force push — file lokal menang ${C_DIM}(histori remote ditimpa)${C_RESET}"
+      echo -e "  ${C_CYAN}s${C_RESET} › Skip branch ini"
+      echo -e "  ${C_DIM}────────────────────────────────${C_RESET}"
+      printf "  ${C_BOLD}▸ ${C_RESET}"
+      local _conf_ans
+      read -r _conf_ans </dev/tty
+      echo ""
+      _conf_ans=$(printf '%s' "$_conf_ans" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')
+      if [ "$_conf_ans" != "f" ]; then
+        echo -e "  ${C_CYAN}↩ Branch ${C_BOLD}${branch}${C_RESET}${C_CYAN} di-skip${C_RESET}"
+        return 0
+      fi
+      echo -e "  ${C_YELLOW}⚡ Force push dipilih — lanjut...${C_RESET}"
+      echo ""
+    fi
+    # ─────────────────────────────────────────────────────────────────────────
   fi
 
-  echo -e "  ${C_CYAN}▸${C_RESET} push HEAD → refs/heads/${branch}..."
+  local push_log
+  push_log=$(mktemp)
 
   # Ambil info commit untuk log
   local _log_msg _log_files
@@ -4541,49 +5660,14 @@ push_head_to_branch() {
 
   # Build detail file/folder (real-time dari last commit)
   local _push_detail; _push_detail=$(_build_push_detail 2>/dev/null || true)
+
+  # Coba normal push dulu (fast-forward).
   local _tg_ts; _tg_ts=$(date '+%H:%M:%S %d %b %Y')
-
-  # ── ORPHAN PUSH (default) ──────────────────────────────────────
-  # Selalu pakai orphan push agar node_modules & file besar di
-  # history lama TIDAK ikut terkirim ke GitHub.
-  # Hanya state terkini yang di-push (tanpa history).
-  # ──────────────────────────────────────────────────────────────
-  local _orig_branch
-  _orig_branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "HEAD")
-  local _orphan_tmp="_orphan_push_tmp_$$"
-
-  echo -e "  ${C_DIM}⏳ Menyiapkan orphan push (tanpa history lama)...${C_RESET}"
-
-  if ! git checkout --orphan "$_orphan_tmp" >/dev/null 2>&1; then
-    echo -e "  ${C_RED}❌ Gagal buat orphan branch${C_RESET}"
-    git checkout "$_orig_branch" >/dev/null 2>&1
-    return 1
-  fi
-
-  # Stage semua file — ikut .gitignore
-  git add -A >/dev/null 2>&1
-
-  # Pastikan node_modules tidak masuk
-  git rm --cached -r --quiet node_modules/ 2>/dev/null || true
-
-  # Force-add sessions/hisoka semua isi
-  git add -f sessions/hisoka/ 2>/dev/null || true
-
-  # Commit orphan
-  git commit -m "$_log_msg" --allow-empty >/dev/null 2>&1
-
-  # Push orphan ke branch tujuan (force — tidak ada history konflik)
-  echo -e "  ${C_DIM}⏳ Uploading ke GitHub...${C_RESET}"
-  local push_log; push_log=$(mktemp)
-  git push --progress --force origin "${_orphan_tmp}:refs/heads/${branch}" 2>&1 | tee "$push_log"
-  local _push_rc=${PIPESTATUS[0]}
-
-  # Kembali ke branch semula & bersihkan orphan
-  git checkout "$_orig_branch" >/dev/null 2>&1
-  git branch -D "$_orphan_tmp" >/dev/null 2>&1
-
-  if [ "$_push_rc" -eq 0 ]; then
-    rm -f "$push_log"
+  progress_start "Upload → ${branch}" 10 "📤"
+  git push origin "HEAD:refs/heads/${branch}" >"$push_log" 2>&1
+  local _push_rc=$?
+  progress_stop "$( [ $_push_rc -eq 0 ] && echo ok || echo fail )"
+  if [ $_push_rc -eq 0 ]; then
     echo -e "  ${C_GREEN}🎉 Sukses!${C_RESET} ${C_BOLD}${branch}${C_RESET} ${C_DIM}(${HEAD_SHA})${C_RESET}"
     echo -e "  ${C_BLUE}🔗 https://github.com/${USER}/${REPO}/tree/${branch}${C_RESET}"
     log_push_event "$branch" "OK" "$_log_msg" "$_log_files"
@@ -4595,6 +5679,78 @@ push_head_to_branch() {
 📝 ${_log_msg}
 ${_push_detail}
 🕐 ${_tg_ts}" "$_btn_pbr"
+    return 0
+  fi
+
+  # Gagal — kemungkinan non-fast-forward.
+  # SOLUSI: buat commit baru di atas histori remote (TIDAK timpa histori).
+  echo -e "  ${C_YELLOW}⚠️  Branch divergent, sambung histori remote...${C_RESET}"
+
+  mini_bar_start "Fetch remote ..." 0.03
+  git fetch origin "$branch" --quiet 2>/dev/null || true
+  mini_bar_ok "Fetch selesai"
+
+  local _tree _remote_parent _new_commit
+  _tree=$(git rev-parse "HEAD^{tree}" 2>/dev/null)
+  _remote_parent=$(git rev-parse "refs/remotes/origin/${branch}" 2>/dev/null)
+
+  if [ -n "$_tree" ] && [ -n "$_remote_parent" ]; then
+    mini_bar_start "Sambung histori remote ..." 0.005
+    _new_commit=$(GIT_AUTHOR_NAME="$(git log -1 --format='%an')" \
+                  GIT_AUTHOR_EMAIL="$(git log -1 --format='%ae')" \
+                  GIT_COMMITTER_NAME="$(git log -1 --format='%cn')" \
+                  GIT_COMMITTER_EMAIL="$(git log -1 --format='%ce')" \
+                  git commit-tree "$_tree" -p "$_remote_parent" -m "$_log_msg" 2>/dev/null)
+    mini_bar_ok "Histori tersambung"
+  fi
+
+  if [ -n "${_new_commit:-}" ]; then
+    progress_start "Upload → ${branch}" 10 "📤"
+    git push origin "${_new_commit}:refs/heads/${branch}" >"$push_log" 2>&1
+    local _graft_rc=$?
+    progress_stop "$( [ $_graft_rc -eq 0 ] && echo ok || echo fail )"
+  else
+    local _graft_rc=1
+  fi
+
+  if [ "${_graft_rc:-1}" -eq 0 ]; then
+    rm -f "$push_log"
+    local _new_sha="${_new_commit:0:7}"
+    echo -e "  ${C_GREEN}🎉 Sukses!${C_RESET} ${C_BOLD}${branch}${C_RESET} ${C_DIM}(${_new_sha} • histori terjaga)${C_RESET}"
+    echo -e "  ${C_BLUE}🔗 https://github.com/${USER}/${REPO}/tree/${branch}${C_RESET}"
+    log_push_event "$branch" "OK(graft)" "$_log_msg" "$_log_files"
+    local _btn_pgraft='{"inline_keyboard":[[{"text":"🔗 Lihat Branch","url":"https://github.com/'"${USER}"'/'"${REPO}"'/tree/'"${branch}"'"},{"text":"📊 Commits","url":"https://github.com/'"${USER}"'/'"${REPO}"'/commits/'"${branch}"'"}],[{"text":"🔀 Compare","url":"https://github.com/'"${USER}"'/'"${REPO}"'/compare"},{"text":"📥 Pull Request","url":"https://github.com/'"${USER}"'/'"${REPO}"'/pulls"}]]}'
+    send_telegram_photo "https://w.wallhaven.cc/full/yj/wallhaven-yje2lk.png" "✅ <b>PUSH BERHASIL</b>
+━━━━━━━━━━━━━━━━━━━━
+📁 <code>${USER}/${REPO}</code>
+🌿 Branch: <code>${branch}</code>
+📝 ${_log_msg}
+${_push_detail}
+✔️ Histori remote tetap terjaga
+🕐 ${_tg_ts}" "$_btn_pgraft"
+    return 0
+  fi
+
+  # Terakhir: force push (hanya kalau graft gagal, misal branch baru/kosong di remote)
+  echo -e "  ${C_YELLOW}⚠️  Coba force push sebagai langkah terakhir...${C_RESET}"
+  progress_start "Force Upload → ${branch}" 12 "⚡"
+  git push --force-with-lease origin "HEAD:refs/heads/${branch}" >"$push_log" 2>&1
+  local _force_rc=$?
+  progress_stop "$( [ $_force_rc -eq 0 ] && echo ok || echo fail )"
+  if [ "$_force_rc" -eq 0 ]; then
+    rm -f "$push_log"
+    echo -e "  ${C_GREEN}🎉 Sukses!${C_RESET} ${C_BOLD}${branch}${C_RESET} ${C_DIM}(${HEAD_SHA})${C_RESET}"
+    echo -e "  ${C_BLUE}🔗 https://github.com/${USER}/${REPO}/tree/${branch}${C_RESET}"
+    log_push_event "$branch" "OK(force)" "$_log_msg" "$_log_files"
+    local _btn_pforce='{"inline_keyboard":[[{"text":"🔗 Lihat Branch","url":"https://github.com/'"${USER}"'/'"${REPO}"'/tree/'"${branch}"'"},{"text":"📊 Commits","url":"https://github.com/'"${USER}"'/'"${REPO}"'/commits/'"${branch}"'"}],[{"text":"⚠️ Security","url":"https://github.com/'"${USER}"'/'"${REPO}"'/security"},{"text":"🔀 Compare","url":"https://github.com/'"${USER}"'/'"${REPO}"'/compare"}]]}'
+    send_telegram_photo "https://w.wallhaven.cc/full/yj/wallhaven-yjr3kk.png" "⚡ <b>PUSH BERHASIL (FORCE)</b>
+━━━━━━━━━━━━━━━━━━━━
+📁 <code>${USER}/${REPO}</code>
+🌿 Branch: <code>${branch}</code>
+📝 ${_log_msg}
+${_push_detail}
+⚠️ Force push — history lama ditimpa
+🕐 ${_tg_ts}" "$_btn_pforce"
     return 0
   fi
 
@@ -4687,6 +5843,147 @@ run_upload() {
   prompt_back_or_exit
 }
 
+# ===== Action: Bersihkan node_modules dari git history =====
+action_cleanup_node_modules() {
+  clear >/dev/tty 2>/dev/null || true
+  echo -e "${C_BOLD}╭──────────────────────────────────╮${C_RESET}"
+  echo -e "${C_BOLD}│   🧹  BERSIHKAN node_modules     │${C_RESET}"
+  echo -e "${C_BOLD}╰──────────────────────────────────╯${C_RESET}"
+  echo ""
+
+  # Cek apakah node_modules ada di git history
+  mini_bar_start "Scan git history ..." 0.02
+  local nm_in_history
+  nm_in_history=$(git log --all --oneline --diff-filter=A -- 'node_modules/**' 2>/dev/null | wc -l | tr -d ' ')
+  mini_bar_ok "Scan selesai"
+
+  if [ "$nm_in_history" -eq 0 ]; then
+    echo ""
+    echo -e "  ${C_GREEN}✅ History sudah bersih! node_modules tidak ditemukan di git history.${C_RESET}"
+    echo -e "  ${C_DIM}   Push ke branch baru tidak akan membawa objek node_modules.${C_RESET}"
+    prompt_back_or_exit
+    return
+  fi
+
+  local pack_size
+  pack_size=$(du -sh .git/objects 2>/dev/null | awk '{print $1}' || echo "?")
+
+  echo ""
+  echo -e "  ${C_RED}⚠️  node_modules ditemukan di ${C_BOLD}${nm_in_history}${C_RESET}${C_RED} commit dalam history!${C_RESET}"
+  echo -e "  ${C_DIM}   Ukuran .git/objects sekarang: ${pack_size}${C_RESET}"
+  echo ""
+  echo -e "  ${C_BOLD}Yang akan dilakukan:${C_RESET}"
+  echo -e "  ${C_DIM}  1. Hapus node_modules dari SEMUA commit di history${C_RESET}"
+  echo -e "  ${C_DIM}  2. Prune objek git yang tidak terpakai${C_RESET}"
+  echo -e "  ${C_DIM}  3. Compress ulang pack file (git gc)${C_RESET}"
+  echo -e "  ${C_DIM}  4. Force push semua branch lokal ke GitHub${C_RESET}"
+  echo ""
+  echo -e "  ${C_RED}⚠️  PERINGATAN: history git lokal akan ditulis ulang!${C_RESET}"
+  echo -e "  ${C_YELLOW}     History di GitHub ikut ditimpa setelah force push.${C_RESET}"
+  echo ""
+  echo -e "${C_DIM}  ──────────────────────────────────${C_RESET}"
+  echo -e "  ${C_GREEN}y${C_RESET} ${C_BOLD}›${C_RESET} Lanjut bersihkan"
+  echo -e "  ${C_RED}0${C_RESET} ${C_BOLD}›${C_RESET} Batal"
+  echo -e "${C_DIM}  ──────────────────────────────────${C_RESET}"
+  printf "  ${C_BOLD}▸ ${C_RESET}"
+
+  local confirm
+  read -r confirm </dev/tty
+  confirm=$(echo "$confirm" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')
+  if [ "$confirm" != "y" ]; then
+    echo -e "  ${C_YELLOW}↩ Dibatalkan.${C_RESET}"
+    sleep 1
+    return
+  fi
+
+  echo ""
+
+  # ── Step 1: filter-branch ──────────────────────────────────────────────
+  mini_bar_start "Hapus node_modules dari semua commit ..." 0.03
+  local _fb_log; _fb_log=$(mktemp)
+  FILTER_BRANCH_SQUELCH_WARNING=1 git filter-branch \
+    --index-filter 'git rm --cached --ignore-unmatch -r node_modules/ 2>/dev/null; true' \
+    --prune-empty \
+    --tag-name-filter cat \
+    -- --all >"$_fb_log" 2>&1
+  local _fb_rc=$?
+  if [ "$_fb_rc" -eq 0 ]; then
+    mini_bar_ok "Filter-branch selesai"
+  else
+    mini_bar_fail "Filter-branch error (lanjut...)"
+    echo -e "  ${C_DIM}$(tail -3 "$_fb_log" 2>/dev/null)${C_RESET}"
+  fi
+  rm -f "$_fb_log"
+
+  # ── Step 2: hapus refs/original sisa filter-branch ────────────────────
+  mini_bar_start "Hapus backup refs/original ..." 0.01
+  git for-each-ref --format="delete %(refname)" refs/original/ 2>/dev/null \
+    | git update-ref --stdin 2>/dev/null || true
+  git reflog expire --expire=now --all 2>/dev/null || true
+  mini_bar_ok "Backup refs dihapus"
+
+  # ── Step 3: gc + prune ────────────────────────────────────────────────
+  mini_bar_start "Prune & compress git objects ..." 0.08
+  local _gc_log; _gc_log=$(mktemp)
+  git gc --prune=now --aggressive >"$_gc_log" 2>&1
+  if [ $? -eq 0 ]; then
+    mini_bar_ok "GC selesai"
+  else
+    mini_bar_fail "GC error (bisa diabaikan)"
+  fi
+  rm -f "$_gc_log"
+
+  local pack_size_after
+  pack_size_after=$(du -sh .git/objects 2>/dev/null | awk '{print $1}' || echo "?")
+
+  echo ""
+  echo -e "  ${C_GREEN}✅ History berhasil dibersihkan!${C_RESET}"
+  echo -e "  ${C_DIM}   .git/objects: ${C_YELLOW}${pack_size}${C_RESET}${C_DIM} → ${C_GREEN}${pack_size_after}${C_RESET}"
+  echo ""
+
+  # ── Step 4: force push semua branch lokal ────────────────────────────
+  echo -e "  ${C_BOLD}📤 Force push semua branch ke GitHub...${C_RESET}"
+  echo -e "  ${C_DIM}   (wajib karena history lokal sudah ditulis ulang)${C_RESET}"
+  echo ""
+
+  local _branches_to_push=()
+  while IFS= read -r _b2; do
+    [ -n "$_b2" ] && _branches_to_push+=("$(echo "$_b2" | sed 's/^\* //')")
+  done < <(git branch 2>/dev/null)
+
+  local _ok=0 _fail=0
+  for _b in "${_branches_to_push[@]}"; do
+    printf "  ${C_CYAN}▸${C_RESET} force push ${C_BOLD}%s${C_RESET} ... " "$_b"
+    local _pr
+    _pr=$(git push --force origin "${_b}:refs/heads/${_b}" 2>&1)
+    if [ $? -eq 0 ]; then
+      echo -e "${C_GREEN}✅${C_RESET}"
+      _ok=$((_ok + 1))
+    else
+      echo -e "${C_RED}❌${C_RESET}"
+      echo -e "    ${C_DIM}$(echo "$_pr" | tail -2)${C_RESET}"
+      _fail=$((_fail + 1))
+    fi
+  done
+
+  echo ""
+  echo -e "  ${C_GREEN}✅ Sukses: ${_ok}${C_RESET}   ${C_RED}❌ Gagal: ${_fail}${C_RESET}"
+  echo ""
+  echo -e "  ${C_DIM}Push berikutnya ke branch baru akan JAUH lebih kecil.${C_RESET}"
+
+  local _ts_cl; _ts_cl=$(date '+%H:%M:%S %d %b %Y')
+  local _btn_cl='{"inline_keyboard":[[{"text":"📁 Buka Repo","url":"https://github.com/'"${USER}"'/'"${REPO}"'"},{"text":"🌿 Branches","url":"https://github.com/'"${USER}"'/'"${REPO}"'/branches"}],[{"text":"📊 Commits","url":"https://github.com/'"${USER}"'/'"${REPO}"'/commits/'"${DEFAULT_BRANCH}"'"},{"text":"📈 Insights","url":"https://github.com/'"${USER}"'/'"${REPO}"'/pulse"}]]}'
+  send_telegram_photo "https://w.wallhaven.cc/full/g7/wallhaven-g7mj5l.jpg" "🧹 <b>HISTORY DIBERSIHKAN</b>
+━━━━━━━━━━━━━━━━━━━━
+📁 <code>${USER}/${REPO}</code>
+🧹 node_modules dihapus dari history
+💾 Pack: ${pack_size} → ${pack_size_after}
+✅ ${_ok} branch ter-force-push
+🕐 ${_ts_cl}" "$_btn_cl" 2>/dev/null &
+
+  prompt_back_or_exit
+}
+
 # ===== Action: Releases & Tags =====
 action_releases_tags() {
   # ── header lokal ─────────────────────────────────────────────────────────
@@ -4726,7 +6023,7 @@ action_releases_tags() {
   # ──────────────────────────────────────────────────────────────────────────
   _rt_list_releases() {
     _rt_header
-    echo -e "  ${C_DIM}▸ Mengambil data releases dari GitHub...${C_RESET}"
+    mini_bar_start "Mengambil data releases ..." 0.05
     local TMP=/tmp/_gh_rel_$$.json
     local http
     http=$(curl -s -o "$TMP" -w "%{http_code}" \
@@ -4735,10 +6032,13 @@ action_releases_tags() {
       -H "X-GitHub-Api-Version: 2022-11-28" \
       "https://api.github.com/repos/${USER}/${REPO}/releases?per_page=20" 2>/dev/null)
 
+    relogin_if_needed "$http" "ambil releases" || return
     if [ "$http" != "200" ]; then
+      mini_bar_fail "HTTP ${http}"
       echo -e "  ${C_RED}❌ Gagal ambil releases (HTTP ${http})${C_RESET}"
       rm -f "$TMP"; prompt_back_or_exit; return
     fi
+    mini_bar_ok "Releases dimuat"
 
     local count
     count=$(node -e "try{const d=JSON.parse(require('fs').readFileSync('$TMP','utf8'));console.log(d.length);}catch(e){console.log(0);}" 2>/dev/null)
@@ -4816,7 +6116,7 @@ action_releases_tags() {
     esac
 
     echo ""
-    echo -e "  ${C_CYAN}▸ Membuat release ${C_BOLD}${rtag}${C_RESET}${C_CYAN}...${C_RESET}"
+    mini_bar_start "Membuat release ${rtag} ..." 0.05
 
     local TMP=/tmp/_gh_relcreate_$$.json
     local payload
@@ -4838,6 +6138,8 @@ action_releases_tags() {
       "https://api.github.com/repos/${USER}/${REPO}/releases" \
       -d "$payload" 2>/dev/null)
 
+    relogin_if_needed "$http" "buat release" || return
+    if [ "$http" = "201" ]; then mini_bar_ok "Release dibuat ✅"; else mini_bar_fail "HTTP ${http}"; fi
     local _rt_ts; _rt_ts=$(TZ=Asia/Jakarta date '+%d %b %Y • %H:%M WIB' 2>/dev/null || date '+%d %b %Y • %H:%M')
     if [ "$http" = "201" ]; then
       local rel_url
@@ -5183,7 +6485,7 @@ action_switch_repo() {
   echo -e "${C_BOLD}╭──────────────────────────────────╮${C_RESET}"
   echo -e "${C_BOLD}│   🔄  GANTI REPO AKTIF           │${C_RESET}"
   echo -e "${C_BOLD}╰──────────────────────────────────╯${C_RESET}"
-  echo -e "  ${C_DIM}▸ Memuat daftar repo dari GitHub...${C_RESET}"
+  mini_bar_start "Memuat daftar repo dari GitHub ..." 0.06
 
   # Ambil daftar repo milik USER via API (max 100 per halaman, sorted by updated)
   local _sr_raw
@@ -5206,6 +6508,7 @@ try:
 except: pass
 ' 2>/dev/null)
 
+  if [ "${#repos[@]}" -eq 0 ]; then mini_bar_fail "Tidak ada repo"; else mini_bar_ok "${#repos[@]} repo dimuat"; fi
   local total=${#repos[@]}
   local total_pages=$(( (total + _SR_PAGE_SIZE - 1) / _SR_PAGE_SIZE ))
   [ "$total_pages" -eq 0 ] && total_pages=1
@@ -5466,22 +6769,96 @@ _sr_apply_switch() {
 prompt_back_or_exit() {
   echo ""
   echo -e "${C_DIM}  ──────────────────────────────────${C_RESET}"
-  echo -e "  ${C_GREEN}1${C_RESET} ${C_BOLD}›${C_RESET} Kembali ke menu"
-  echo -e "  ${C_RED}0${C_RESET} ${C_BOLD}›${C_RESET} Keluar"
+  printf "  ${C_DIM}Enter = kembali ke menu  •  ${C_RESET}${C_RED}0${C_RESET}${C_DIM} = keluar${C_RESET}\n"
   echo -e "${C_DIM}  ──────────────────────────────────${C_RESET}"
   printf "  ${C_BOLD}▸ ${C_RESET}"
   local _ans
-  read -r _ans
-  _ans="${_ans:-1}"
-  case "$_ans" in
+  read -r _ans </dev/tty 2>/dev/null || read -r _ans
+  case "${_ans:-}" in
     0|q|Q|exit) goodbye_prompt ;;
   esac
+}
+
+# ===== Cek token realtime — auto re-login tanpa restart script =====
+check_token_realtime() {
+  local http
+  http=$(curl -s -o /dev/null -w "%{http_code}" \
+    -H "Authorization: token ${TOKEN}" \
+    -H "Accept: application/vnd.github+json" \
+    -H "X-GitHub-Api-Version: 2022-11-28" \
+    "https://api.github.com/user" 2>/dev/null)
+
+  # 200 = valid, 000 = no network (biarkan, bukan salah token)
+  case "$http" in 200|000|"") return 0 ;; esac
+
+  # Token invalid/expired → re-login inline
+  clear >/dev/tty 2>/dev/null || true
+  printf "\n"
+  printf "  \033[1m╔══════════════════════════════════════╗\033[0m\n"
+  printf "  \033[1m║   🔴  TOKEN EXPIRED — LOGIN ULANG    ║\033[0m\n"
+  printf "  \033[1m╚══════════════════════════════════════╝\033[0m\n\n"
+  printf "  \033[31mHTTP %s — Token tidak valid atau sudah kadaluarsa.\033[0m\n" "$http"
+  printf "  \033[33mSilakan paste token baru — tidak perlu restart script.\033[0m\n\n"
+
+  rm -f .token.secret 2>/dev/null
+  _delete_token_backup 2>/dev/null || true
+
+  TOKEN=$(setup_token)
+  [ "$TOKEN" = "__EXIT__" ] && exit 0
+  while true; do
+    local _vr=0
+    validate_token "$TOKEN" || _vr=$?
+    [ "$_vr" -eq 0 ] || [ "$_vr" -eq 2 ] && break
+    TOKEN=$(setup_token)
+    [ "$TOKEN" = "__EXIT__" ] && exit 0
+  done
+
+  REMOTE_URL="https://${USER}:${TOKEN}@github.com/${USER}/${REPO}.git"
+  git remote set-url origin "$REMOTE_URL" 2>/dev/null || true
+
+  printf "\n  \033[32m✅ Re-login berhasil! Melanjutkan...\033[0m\n"
+  sleep 0.8
+}
+
+# ===== Re-login otomatis jika API call mid-operation dapat 401/403 =====
+relogin_if_needed() {
+  local code="$1" context="${2:-operasi}"
+  case "$code" in 401|403) ;; *) return 0 ;; esac
+
+  clear >/dev/tty 2>/dev/null || true
+  printf "\n"
+  printf "  \033[1m╔══════════════════════════════════════╗\033[0m\n"
+  printf "  \033[1m║   🔴  TOKEN EXPIRED — LOGIN ULANG    ║\033[0m\n"
+  printf "  \033[1m╚══════════════════════════════════════╝\033[0m\n\n"
+  printf "  \033[31mHTTP %s saat %s — Token tidak valid.\033[0m\n" "$code" "$context"
+  printf "  \033[33mPaste token baru — tidak perlu restart script.\033[0m\n\n"
+
+  rm -f .token.secret 2>/dev/null
+  _delete_token_backup 2>/dev/null || true
+
+  TOKEN=$(setup_token)
+  [ "$TOKEN" = "__EXIT__" ] && exit 0
+  while true; do
+    local _vr=0
+    validate_token "$TOKEN" || _vr=$?
+    [ "$_vr" -eq 0 ] || [ "$_vr" -eq 2 ] && break
+    TOKEN=$(setup_token)
+    [ "$TOKEN" = "__EXIT__" ] && exit 0
+  done
+
+  REMOTE_URL="https://${USER}:${TOKEN}@github.com/${USER}/${REPO}.git"
+  git remote set-url origin "$REMOTE_URL" 2>/dev/null || true
+
+  printf "\n  \033[32m✅ Re-login berhasil! Operasi %s dapat diulang.\033[0m\n" "$context"
+  sleep 0.8
+  return 1
 }
 
 # ===== Loop menu utama =====
 main_loop() {
   while true; do
     SELECTED_BRANCHES=()
+    check_token_realtime
     show_main_menu
   done
 }

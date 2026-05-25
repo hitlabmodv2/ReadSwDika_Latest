@@ -1,5 +1,12 @@
 {
   "name": "F",
   "updatedAt": "2026-05-17T11:54:08.694Z",
-  "firstSeen": "2026-05-17T11:54:08.694Z"
+  "firstSeen": "2026-05-17T11:54:08.694Z",
+  "aiMemory": {
+    "style": null,
+    "nickname": null,
+    "lang": null,
+    "lastUpdated": null,
+    "msgCount": 0
+  }
 }

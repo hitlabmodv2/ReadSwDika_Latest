@@ -4078,7 +4078,8 @@
     "id": "6289681008411@s.whatsapp.net",
     "name": "Hen V1",
     "lid": "274255723921630@lid",
-    "jid": "6289681008411@s.whatsapp.net"
+    "jid": "6289681008411@s.whatsapp.net",
+    "notify": "Hen V1"
   },
   "6285892010163@s.whatsapp.net": {
     "isContact": true,
@@ -6635,7 +6636,9 @@
     "id": "6282178071400@s.whatsapp.net",
     "name": "! zyennn",
     "lid": "207348589179086@lid",
-    "jid": "6282178071400@s.whatsapp.net"
+    "jid": "6282178071400@s.whatsapp.net",
+    "notify": "hell ah",
+    "verifiedName": "hell ah"
   },
   "6282131383661@s.whatsapp.net": {
     "isContact": true,
@@ -31219,5 +31222,11 @@
     "id": "110724508610629@lid",
     "lid": "110724508610629@lid",
     "imgUrl": "changed"
+  },
+  "207348589179086@lid": {
+    "id": "207348589179086@lid",
+    "lid": "207348589179086@lid",
+    "notify": "hell ah",
+    "verifiedName": "hell ah"
   }
 }

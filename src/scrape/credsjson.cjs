@@ -1,11 +1,15 @@
 'use strict';
 
-const fs   = require('fs');
-const path = require('path');
-const pino = require('pino');
+const fs            = require('fs');
+const path          = require('path');
+const pino          = require('pino');
+const { execFile }  = require('child_process');
+const os            = require('os');
 
 const CREDS_BASE_DIR     = path.join(process.cwd(), 'credsjson');
 const PAIRING_TIMEOUT_MS = 3 * 60 * 1000;
+const PREKEY_POLL_MS     = 1_500;
+const PREKEY_MAX_WAIT_MS = 40_000;
 
 const silentLogger = pino({ level: 'silent' });
 
@@ -19,9 +23,46 @@ function formatPairingCode(code) {
 }
 
 /**
+ * Polling sampai pre-key-*.json muncul di sessionDir.
+ * Return jumlah file json ketika sudah lengkap, atau 0 jika timeout.
+ */
+async function waitUntilPrekeys(sessionDir) {
+    const deadline = Date.now() + PREKEY_MAX_WAIT_MS;
+    while (Date.now() < deadline) {
+        const allJson  = fs.readdirSync(sessionDir).filter(f => f.endsWith('.json'));
+        const prekeys  = allJson.filter(f => f.startsWith('pre-key-'));
+        if (prekeys.length >= 5) return allJson.length;
+        await new Promise(r => setTimeout(r, PREKEY_POLL_MS));
+    }
+    // timeout — kirim apapun yang ada
+    return fs.readdirSync(sessionDir).filter(f => f.endsWith('.json')).length;
+}
+
+/**
+ * Pack semua file .json di sessionDir jadi Buffer tar.gz
+ */
+function packToBuffer(sessionDir) {
+    return new Promise((resolve, reject) => {
+        const tmpOut = path.join(os.tmpdir(), `cj_${Date.now()}.tar.gz`);
+        const files  = fs.readdirSync(sessionDir).filter(f => f.endsWith('.json'));
+        if (!files.length) return reject(new Error('Tidak ada file session'));
+
+        execFile('tar', ['-czf', tmpOut, '-C', sessionDir, ...files], err => {
+            if (err) return reject(new Error(`tar gagal: ${err.message}`));
+            try {
+                const buf = fs.readFileSync(tmpOut);
+                try { fs.unlinkSync(tmpOut); } catch {}
+                resolve(buf);
+            } catch (e) {
+                reject(e);
+            }
+        });
+    });
+}
+
+/**
  * Buat & jalankan sesi WhatsApp khusus credsjson.
- * Session disimpan di credsjson/[number]/
- * Setelah terhubung → tunggu semua file → kirim session.tar.gz → hapus folder.
+ * Setelah terhubung → tunggu pre-keys generate → pack semua file → kirim → hapus folder.
  */
 async function startCredsJsonSession(number, opts = {}) {
     const {
@@ -54,6 +95,7 @@ async function startCredsJsonSession(number, opts = {}) {
         browser          : ['Ubuntu', 'Chrome', '136.0.7103.93'],
         keepAliveIntervalMs: 30_000,
         syncFullHistory  : false,
+        getMessage       : async () => undefined,
     });
 
     let pairingRequested = false;
@@ -64,10 +106,11 @@ async function startCredsJsonSession(number, opts = {}) {
         aborted = true;
         try { sock.ev.removeAllListeners(); } catch {}
         try { if (sock.ws) sock.ws.close(); } catch {}
-        try { fs.rmSync(sessionDir, { recursive: true, force: true }); } catch {}
+        setTimeout(() => {
+            try { fs.rmSync(sessionDir, { recursive: true, force: true }); } catch {}
+        }, 2000);
     }
 
-    // Timeout 3 menit jika belum terhubung
     const timeoutHandle = setTimeout(async () => {
         if (connected || aborted) return;
         cleanup();
@@ -81,7 +124,7 @@ async function startCredsJsonSession(number, opts = {}) {
     sock.ev.on('connection.update', async ({ connection, lastDisconnect }) => {
         if (aborted) return;
 
-        // ── Generate pairing code saat connecting pertama kali ──
+        // ── Request pairing code saat connecting ──
         if (connection === 'connecting' && !state.creds?.registered && !pairingRequested) {
             pairingRequested = true;
             setTimeout(async () => {
@@ -101,41 +144,41 @@ async function startCredsJsonSession(number, opts = {}) {
                         if (retries === 0) {
                             try { await onError(e); } catch {}
                         } else {
-                            await new Promise(r => setTimeout(r, 1000));
+                            await new Promise(r => setTimeout(r, 1500));
                         }
                     }
                 }
             }, 1500);
         }
 
-        // ── Terhubung ──
+        // ── Berhasil terhubung ──
         if (connection === 'open' && !connected) {
             connected = true;
             clearTimeout(timeoutHandle);
 
-            // Tunggu creds.json tersimpan ke disk (syncFullHistory butuh sedikit waktu)
-            setTimeout(async () => {
+            // Tunggu pre-key files generate, lalu pack semua
+            (async () => {
                 try {
-                    const credsPath = path.join(sessionDir, 'creds.json');
-                    if (!fs.existsSync(credsPath)) throw new Error('creds.json tidak ditemukan setelah connect');
-                    const buf = fs.readFileSync(credsPath);
-                    await onConnected(buf, number);
+                    const fileCount = await waitUntilPrekeys(sessionDir);
+                    const buf       = await packToBuffer(sessionDir);
+                    await onConnected(buf, number, fileCount);
                 } catch (e) {
                     try { await onError(e); } catch {}
                 } finally {
                     cleanup();
                 }
-            }, 3000);
+            })();
         }
 
         // ── Koneksi putus sebelum berhasil ──
         if (connection === 'close' && !connected && !aborted) {
             const code = lastDisconnect?.error?.output?.statusCode;
-            if (code === 401) {
+            if (code === 401 || code === 403) {
                 clearTimeout(timeoutHandle);
                 cleanup();
-                try { await onError(new Error('Sesi tidak valid / ditolak WhatsApp (401)')); } catch {}
+                try { await onError(new Error(`Sesi ditolak WhatsApp (${code})`)); } catch {}
             }
+            // kode lain (515, dsb) biarkan — WA sedang proses pairing
         }
     });
 

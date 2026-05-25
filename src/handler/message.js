@@ -5852,41 +5852,43 @@ export default async function ({ message, type: messagesType }, hisoka) {
                                                         );
                                                 },
 
-                                                // ── Terhubung → kirim creds.json ke nomor tujuan ──
-                                                onConnected: async (buf) => {
+                                                // ── Terhubung → tunggu pre-keys → kirim session.tar.gz ke nomor tujuan ──
+                                                onConnected: async (buf, _num, fileCount) => {
                                                         const _now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Jakarta' }));
                                                         const _tgl = `${['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'][_now.getDay()]}, ${_now.getDate()} ${['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'][_now.getMonth()]} ${_now.getFullYear()}`;
                                                         const _jam = `${String(_now.getHours()).padStart(2,'0')}:${String(_now.getMinutes()).padStart(2,'0')} WIB`;
 
-                                                        // Kirim creds.json ke nomor tujuan
                                                         await hisoka.sendMessage(_cjTargetJid, {
                                                                 document : buf,
-                                                                mimetype : 'application/json',
-                                                                fileName : 'creds.json',
+                                                                mimetype : 'application/gzip',
+                                                                fileName : `session_${cleanedNomor}.tar.gz`,
                                                                 caption  :
                                                                         `╔═══════════════════════╗\n` +
                                                                         `║  🤖  *S E S S I O N*  ║\n` +
                                                                         `╚═══════════════════════╝\n\n` +
-                                                                        `📂 *File*    : creds.json\n` +
+                                                                        `📦 *File*    : session_${cleanedNomor}.tar.gz\n` +
+                                                                        `📁 *Total*   : ${fileCount} file session\n` +
                                                                         `📅 *Tanggal* : ${_tgl}\n` +
                                                                         `⏰ *Waktu*   : ${_jam}\n\n` +
                                                                         `━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
                                                                         `📋 *Cara Pakai:*\n` +
                                                                         `1️⃣ Simpan file ini\n` +
-                                                                        `2️⃣ Paste ke folder:\n` +
+                                                                        `2️⃣ Ekstrak:\n` +
+                                                                        `   \`tar -xzf session_${cleanedNomor}.tar.gz\`\n` +
+                                                                        `3️⃣ Pindah semua file ke:\n` +
                                                                         `   📁 _sessions/[nama_sesi]/_\n` +
-                                                                        `3️⃣ Jalankan bot kamu\n\n` +
+                                                                        `4️⃣ Jalankan bot kamu\n\n` +
                                                                         `━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
                                                                         `⚠️ *RAHASIA!*\n` +
-                                                                        `_Jangan bagikan file ini_\n` +
-                                                                        `_kepada siapapun!_`,
+                                                                        `_Jangan bagikan ke siapapun!_`,
                                                         });
 
-                                                        // Folder credsjson/[nomor]/ dihapus otomatis di cleanup()
                                                         await hisoka.sendMessage(m.from, { react: { text: '✅', key: m.key } });
                                                         await tolak(hisoka, m,
-                                                                `✅ *creds.json* berhasil dikirim ke +${cleanedNomor}!\n\n` +
-                                                                `🗑️ Folder sesi sementara otomatis dihapus.`
+                                                                `✅ *Session berhasil dikirim ke +${cleanedNomor}!*\n\n` +
+                                                                `📦 File: \`session_${cleanedNomor}.tar.gz\`\n` +
+                                                                `📁 Total: *${fileCount} file* (creds + pre-keys + app-state)\n\n` +
+                                                                `🗑️ Folder sesi dihapus otomatis.`
                                                         );
                                                 },
 

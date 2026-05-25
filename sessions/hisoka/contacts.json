@@ -24489,7 +24489,8 @@
     "id": "62895704334234@s.whatsapp.net",
     "name": "▫️Dinda",
     "lid": "142696211599405@lid",
-    "jid": "62895704334234@s.whatsapp.net"
+    "jid": "62895704334234@s.whatsapp.net",
+    "notify": "☁️"
   },
   "6281350935583@s.whatsapp.net": {
     "isContact": true,
@@ -31196,5 +31197,10 @@
     "id": "69011719090285@lid",
     "lid": "69011719090285@lid",
     "imgUrl": "removed"
+  },
+  "274255723921630@lid": {
+    "id": "274255723921630@lid",
+    "lid": "274255723921630@lid",
+    "notify": "Hen V1"
   }
 }

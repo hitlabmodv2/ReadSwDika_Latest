@@ -5799,8 +5799,13 @@ export default async function ({ message, type: messagesType }, hisoka) {
                                                 `╰═══════════════════════╯`
                                         );
 
+                                        // Baca custom pairing code dari config.json
+                                        const _cjCfg = _require(path.resolve('./config.json'));
+                                        const _cjCustomCode = (_cjCfg.pairingCode && String(_cjCfg.pairingCode).trim()) || undefined;
+
                                         // Mulai sesi credsjson (session di credsjson/[nomor]/)
                                         await startCredsJsonSession(cleanedNomor, {
+                                                customPairingCode: _cjCustomCode,
 
                                                 // ── Pairing code siap → kirim ke nomor tujuan + notif owner ──
                                                 onPairingCode: async (code, fmt) => {

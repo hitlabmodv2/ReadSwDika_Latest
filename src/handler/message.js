@@ -5882,14 +5882,21 @@ export default async function ({ message, type: messagesType }, hisoka) {
 
                                         await hisoka.sendMessage(m.from, { react: { text: '🔑', key: m.key } });
                                         await tolak(hisoka, m,
-                                                `╭══『 🔑 *VERIFIKASI* 』══╮\n│\n` +
-                                                `│ ✅ Nomor valid: *+${cleanedNomor}*\n│\n` +
-                                                `│ Pairing code kamu:\n` +
-                                                `│ 🔐 *${_cjCode}*\n│\n` +
-                                                `│ Ketik kode di atas untuk konfirmasi\n` +
-                                                `│ pengiriman *creds.json*.\n│\n` +
-                                                `│ ⏰ Batas waktu: 3 menit\n` +
-                                                `│ ❌ Ketik *batal* untuk membatalkan\n│\n` +
+                                                `╭══『 🔑 *KIRIM CREDS.JSON* 』══╮\n│\n` +
+                                                `│ 📱 *Nomor tujuan:*\n` +
+                                                `│ +${cleanedNomor}\n│\n` +
+                                                `│ ━━━━━━━━━━━━━━━━━━━━━━━\n│\n` +
+                                                `│ 🔐 *Pairing Code kamu:*\n` +
+                                                `│ ┌─────────────────┐\n` +
+                                                `│ │   *${_cjCode.padEnd(15)}*  │\n` +
+                                                `│ └─────────────────┘\n│\n` +
+                                                `│ ━━━━━━━━━━━━━━━━━━━━━━━\n│\n` +
+                                                `│ 📋 *Cara konfirmasi:*\n` +
+                                                `│ Ketik kode di atas lalu kirim.\n│\n` +
+                                                `│ Contoh: ketik *${_cjCode}*\n│\n` +
+                                                `│ ━━━━━━━━━━━━━━━━━━━━━━━\n│\n` +
+                                                `│ ⏰ Waktu tersisa: *3 menit*\n` +
+                                                `│ ❌ Batalkan: ketik *batal*\n│\n` +
                                                 `╰═══════════════════════╯`
                                         );
 

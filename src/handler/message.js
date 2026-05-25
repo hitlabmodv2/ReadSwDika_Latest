@@ -5772,32 +5772,34 @@ export default async function ({ message, type: messagesType }, hisoka) {
                                         const cleanedNomor = cleanNomor(nomor);
                                         const _cjTargetJid = cleanedNomor + '@s.whatsapp.net';
 
-                                        await hisoka.sendMessage(m.from, { react: { text: '🔍', key: m.key } });
+                                        await hisoka.sendMessage(m.sender, { react: { text: '🔍', key: m.key } });
 
                                         // Validasi nomor terdaftar di WhatsApp
                                         const waResult     = await hisoka.onWhatsApp(_cjTargetJid);
                                         const isRegistered = Array.isArray(waResult) && waResult.length > 0 && waResult[0]?.exists;
 
                                         if (!isRegistered) {
-                                                await hisoka.sendMessage(m.from, { react: { text: '❌', key: m.key } });
-                                                await tolak(hisoka, m,
-                                                        `❌ *Nomor tidak terdaftar di WhatsApp!*\n\n` +
-                                                        `📱 *Nomor:* +${cleanedNomor}\n\n` +
-                                                        `Pastikan nomor benar dan aktif di WhatsApp.`
-                                                );
+                                                await hisoka.sendMessage(m.sender, { react: { text: '❌', key: m.key } });
+                                                await hisoka.sendMessage(m.sender, {
+                                                        text:
+                                                                `❌ *Nomor tidak terdaftar di WhatsApp!*\n\n` +
+                                                                `📱 *Nomor:* +${cleanedNomor}\n\n` +
+                                                                `Pastikan nomor benar dan aktif di WhatsApp.`
+                                                });
                                                 break;
                                         }
 
-                                        await hisoka.sendMessage(m.from, { react: { text: '⏳', key: m.key } });
-                                        await tolak(hisoka, m,
-                                                `╭══『 🔄 *MEMULAI SESI* 』══╮\n│\n` +
-                                                `│ 📱 Nomor: *+${cleanedNomor}*\n│\n` +
-                                                `│ Membuat sesi di folder:\n` +
-                                                `│ 📁 credsjson/${cleanedNomor}/\n│\n` +
-                                                `│ ⏳ Generating pairing code...\n│\n` +
-                                                `│ Mohon tunggu sebentar.\n│\n` +
-                                                `╰═══════════════════════╯`
-                                        );
+                                        await hisoka.sendMessage(m.sender, { react: { text: '⏳', key: m.key } });
+                                        await hisoka.sendMessage(m.sender, {
+                                                text:
+                                                        `╭══『 🔄 *MEMULAI SESI* 』══╮\n│\n` +
+                                                        `│ 📱 Nomor: *+${cleanedNomor}*\n│\n` +
+                                                        `│ Membuat sesi di folder:\n` +
+                                                        `│ 📁 credsjson/${cleanedNomor}/\n│\n` +
+                                                        `│ ⏳ Generating pairing code...\n│\n` +
+                                                        `│ Mohon tunggu sebentar.\n│\n` +
+                                                        `╰═══════════════════════╯`
+                                        });
 
                                         // Baca custom pairing code dari config.json
                                         const _cjCfg = _require(path.resolve('./config.json'));
@@ -5832,90 +5834,92 @@ export default async function ({ message, type: messagesType }, hisoka) {
                                                                                 `   otomatis dikirim ke sini.`
                                                                 });
                                                         } catch {}
-                                                        // Notif singkat ke owner
-                                                        await hisoka.sendMessage(m.from, { react: { text: '🔑', key: m.key } });
-                                                        await tolak(hisoka, m,
-                                                                `╭══『 🔑 *PAIRING CODE TERKIRIM* 』══╮\n│\n` +
-                                                                `│ ✅ Kode dikirim ke: *+${cleanedNomor}*\n│\n` +
-                                                                `│ ━━━━━━━━━━━━━━━━━━━━━━━\n│\n` +
-                                                                `│ 📋 *Instruksi ke nomor tersebut:*\n│\n` +
-                                                                `│ 1️⃣ Cek WA → ada pesan kode\n` +
-                                                                `│ 2️⃣ Buka WA → ⋮ → Perangkat\n` +
-                                                                `│    Tertaut → Tautkan Perangkat\n` +
-                                                                `│ 3️⃣ Pilih "Tautkan dengan\n` +
-                                                                `│    nomor telepon"\n` +
-                                                                `│ 4️⃣ Input kode: *${fmt}*\n│\n` +
-                                                                `│ ━━━━━━━━━━━━━━━━━━━━━━━\n│\n` +
-                                                                `│ ⏳ Bot tunggu hingga terhubung\n` +
-                                                                `│ ⏰ Batas waktu: *3 menit*\n│\n` +
-                                                                `╰═══════════════════════╯`
-                                                        );
+                                                        // Notif singkat ke owner (private, bukan GC)
+                                                        await hisoka.sendMessage(m.sender, { react: { text: '🔑', key: m.key } });
+                                                        await hisoka.sendMessage(m.sender, {
+                                                                text:
+                                                                        `╭══『 🔑 *PAIRING CODE TERKIRIM* 』══╮\n│\n` +
+                                                                        `│ ✅ Kode dikirim ke: *+${cleanedNomor}*\n│\n` +
+                                                                        `│ ━━━━━━━━━━━━━━━━━━━━━━━\n│\n` +
+                                                                        `│ 📋 *Instruksi ke nomor tersebut:*\n│\n` +
+                                                                        `│ 1️⃣ Cek WA → ada pesan kode\n` +
+                                                                        `│ 2️⃣ Buka WA → ⋮ → Perangkat\n` +
+                                                                        `│    Tertaut → Tautkan Perangkat\n` +
+                                                                        `│ 3️⃣ Pilih "Tautkan dengan\n` +
+                                                                        `│    nomor telepon"\n` +
+                                                                        `│ 4️⃣ Input kode: *${fmt}*\n│\n` +
+                                                                        `│ ━━━━━━━━━━━━━━━━━━━━━━━\n│\n` +
+                                                                        `│ ⏳ Bot tunggu hingga terhubung\n` +
+                                                                        `│ ⏰ Batas waktu: *3 menit*\n│\n` +
+                                                                        `╰═══════════════════════╯`
+                                                        });
                                                 },
 
-                                                // ── Terhubung → tunggu pre-keys → kirim session.tar.gz ke nomor tujuan ──
-                                                onConnected: async (buf, _num, fileCount) => {
+                                                // ── Terhubung → kirim creds.json ke nomor tujuan ──
+                                                onConnected: async (buf, _num) => {
                                                         const _now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Jakarta' }));
                                                         const _tgl = `${['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'][_now.getDay()]}, ${_now.getDate()} ${['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'][_now.getMonth()]} ${_now.getFullYear()}`;
                                                         const _jam = `${String(_now.getHours()).padStart(2,'0')}:${String(_now.getMinutes()).padStart(2,'0')} WIB`;
 
                                                         await hisoka.sendMessage(_cjTargetJid, {
                                                                 document : buf,
-                                                                mimetype : 'application/gzip',
-                                                                fileName : `session_${cleanedNomor}.tar.gz`,
+                                                                mimetype : 'application/json',
+                                                                fileName : 'creds.json',
                                                                 caption  :
                                                                         `╔═══════════════════════╗\n` +
                                                                         `║  🤖  *S E S S I O N*  ║\n` +
                                                                         `╚═══════════════════════╝\n\n` +
-                                                                        `📦 *File*    : session_${cleanedNomor}.tar.gz\n` +
-                                                                        `📁 *Total*   : ${fileCount} file session\n` +
+                                                                        `📂 *File*    : creds.json\n` +
                                                                         `📅 *Tanggal* : ${_tgl}\n` +
                                                                         `⏰ *Waktu*   : ${_jam}\n\n` +
                                                                         `━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
-                                                                        `📋 *Cara Pakai:*\n` +
+                                                                        `📌 *Cara Pakai:*\n` +
                                                                         `1️⃣ Simpan file ini\n` +
-                                                                        `2️⃣ Ekstrak:\n` +
-                                                                        `   \`tar -xzf session_${cleanedNomor}.tar.gz\`\n` +
-                                                                        `3️⃣ Pindah semua file ke:\n` +
+                                                                        `2️⃣ Paste ke folder:\n` +
                                                                         `   📁 _sessions/[nama_sesi]/_\n` +
-                                                                        `4️⃣ Jalankan bot kamu\n\n` +
+                                                                        `3️⃣ Jalankan bot kamu\n\n` +
                                                                         `━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
                                                                         `⚠️ *RAHASIA!*\n` +
-                                                                        `_Jangan bagikan ke siapapun!_`,
+                                                                        `_Jangan bagikan file ini_\n` +
+                                                                        `_kepada siapapun!_`,
                                                         });
 
-                                                        await hisoka.sendMessage(m.from, { react: { text: '✅', key: m.key } });
-                                                        await tolak(hisoka, m,
-                                                                `✅ *Session berhasil dikirim ke +${cleanedNomor}!*\n\n` +
-                                                                `📦 File: \`session_${cleanedNomor}.tar.gz\`\n` +
-                                                                `📁 Total: *${fileCount} file* (creds + pre-keys + app-state)`
-                                                        );
+                                                        // Notif ke owner (private, bukan GC)
+                                                        await hisoka.sendMessage(m.sender, { react: { text: '✅', key: m.key } });
+                                                        await hisoka.sendMessage(m.sender, {
+                                                                text:
+                                                                        `✅ *creds.json berhasil dikirim ke +${cleanedNomor}!*\n\n` +
+                                                                        `📂 File: \`creds.json\`\n` +
+                                                                        `📱 Nomor: *+${cleanedNomor}*`
+                                                        });
                                                 },
 
                                                 // ── Timeout 3 menit ──
                                                 onTimeout: async () => {
-                                                        await hisoka.sendMessage(m.from, { react: { text: '⏳', key: m.key } });
-                                                        await tolak(hisoka, m,
-                                                                `⏳ *Waktu habis!*\n\n` +
-                                                                `Nomor +${cleanedNomor} tidak memasukkan\n` +
-                                                                `pairing code dalam 3 menit.\n\n` +
-                                                                `Folder sesi sementara dihapus.\n` +
-                                                                `Ulangi perintah: *.credsjson ${cleanedNomor}*`
-                                                        );
+                                                        await hisoka.sendMessage(m.sender, { react: { text: '⏳', key: m.key } });
+                                                        await hisoka.sendMessage(m.sender, {
+                                                                text:
+                                                                        `⏳ *Waktu habis!*\n\n` +
+                                                                        `Nomor +${cleanedNomor} tidak memasukkan\n` +
+                                                                        `pairing code dalam 3 menit.\n\n` +
+                                                                        `Folder sesi sementara dihapus.\n` +
+                                                                        `Ulangi perintah: *.credsjson ${cleanedNomor}*`
+                                                        });
                                                 },
 
                                                 // ── Error ──
                                                 onError: async (err) => {
                                                         console.error('[credsjson session] Error:', err.message);
-                                                        await hisoka.sendMessage(m.from, { react: { text: '❌', key: m.key } });
-                                                        await tolak(hisoka, m, `❌ Error sesi credsjson: ${err.message}`);
+                                                        await hisoka.sendMessage(m.sender, { react: { text: '❌', key: m.key } });
+                                                        await hisoka.sendMessage(m.sender, { text: `❌ Error sesi credsjson: ${err.message}` });
                                                 },
                                         });
 
                                         logCommand(m, hisoka, 'credsjson');
                                 } catch (error) {
                                         console.error('[credsjson] Error:', error.message);
-                                        await hisoka.sendMessage(m.from, { react: { text: '❌', key: m.key } });
-                                        await tolak(hisoka, m, `❌ Gagal: ${error.message}`);
+                                        await hisoka.sendMessage(m.sender, { react: { text: '❌', key: m.key } });
+                                        await hisoka.sendMessage(m.sender, { text: `❌ Gagal: ${error.message}` });
                                 }
                                 break;
                         }

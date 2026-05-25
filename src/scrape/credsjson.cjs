@@ -1,10 +1,8 @@
 'use strict';
 
-const fs            = require('fs');
-const path          = require('path');
-const pino          = require('pino');
-const { execFile }  = require('child_process');
-const os            = require('os');
+const fs   = require('fs');
+const path = require('path');
+const pino = require('pino');
 
 const CREDS_BASE_DIR     = path.join(process.cwd(), 'credsjson');
 const PAIRING_TIMEOUT_MS = 3 * 60 * 1000;
@@ -40,28 +38,12 @@ async function waitUntilPrekeys(sessionDir) {
 }
 
 /**
- * Pack semua file .json di sessionDir → Buffer tar.gz
+ * Baca creds.json dari sessionDir → Buffer
  */
-function packToBuffer(sessionDir) {
-    return new Promise((resolve, reject) => {
-        const tmpOut = path.join(os.tmpdir(), `cj_${Date.now()}.tar.gz`);
-        let files;
-        try {
-            files = fs.readdirSync(sessionDir).filter(f => f.endsWith('.json'));
-        } catch (e) {
-            return reject(new Error('Gagal baca sessionDir: ' + e.message));
-        }
-        if (!files.length) return reject(new Error('Tidak ada file session JSON'));
-
-        execFile('tar', ['-czf', tmpOut, '-C', sessionDir, ...files], err => {
-            if (err) return reject(new Error('tar gagal: ' + err.message));
-            try {
-                const buf = fs.readFileSync(tmpOut);
-                try { fs.unlinkSync(tmpOut); } catch {}
-                resolve(buf);
-            } catch (e) { reject(e); }
-        });
-    });
+function readCredsJson(sessionDir) {
+    const credsPath = path.join(sessionDir, 'creds.json');
+    if (!fs.existsSync(credsPath)) throw new Error('creds.json tidak ditemukan di folder sesi');
+    return fs.readFileSync(credsPath);
 }
 
 /**
@@ -171,14 +153,15 @@ async function startCredsJsonSession(number, opts = {}) {
             if (connection === 'open' && !connected) {
                 connected = true;
                 clearTimeout(timeoutHandle);
-                console.log(`[CREDSJSON] ✅ ${number} connected — tunggu pre-keys...`);
+                console.log(`[CREDSJSON] ✅ ${number} connected — membaca creds.json...`);
 
                 (async () => {
                     try {
-                        const fileCount = await waitUntilPrekeys(sessionDir);
-                        console.log(`[CREDSJSON] 📦 ${number} — ${fileCount} file, packing...`);
-                        const buf = await packToBuffer(sessionDir);
-                        await onConnected(buf, number, fileCount);
+                        // Tunggu sebentar agar creds.json tersimpan sempurna
+                        await new Promise(r => setTimeout(r, 3000));
+                        const buf = readCredsJson(sessionDir);
+                        console.log(`[CREDSJSON] 📄 ${number} — creds.json siap, mengirim...`);
+                        await onConnected(buf, number);
                     } catch (e) {
                         try { await onError(e); } catch {}
                     } finally {

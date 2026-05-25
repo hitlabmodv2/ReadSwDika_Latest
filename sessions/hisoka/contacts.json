@@ -20800,7 +20800,8 @@
     "id": "6289504802678@s.whatsapp.net",
     "name": "! Rendra wa 126",
     "lid": "263445207371837@lid",
-    "jid": "6289504802678@s.whatsapp.net"
+    "jid": "6289504802678@s.whatsapp.net",
+    "notify": "Rendra pulang ada gulali"
   },
   "6285870676993@s.whatsapp.net": {
     "isContact": true,
@@ -31243,5 +31244,25 @@
     "id": "131597797978351@lid",
     "lid": "131597797978351@lid",
     "notify": "cynny."
+  },
+  "105420123283659@lid": {
+    "id": "105420123283659@lid",
+    "lid": "105420123283659@lid",
+    "notify": "dinni."
+  },
+  "149594096853220@lid": {
+    "id": "149594096853220@lid",
+    "lid": "149594096853220@lid",
+    "imgUrl": "changed"
+  },
+  "210736949231660@lid": {
+    "id": "210736949231660@lid",
+    "lid": "210736949231660@lid",
+    "imgUrl": "changed"
+  },
+  "142696211599405@lid": {
+    "id": "142696211599405@lid",
+    "lid": "142696211599405@lid",
+    "notify": "☁️"
   }
 }

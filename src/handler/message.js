@@ -5861,6 +5861,38 @@ export default async function ({ message, type: messagesType }, hisoka) {
                                                 ? path.join(process.cwd(), 'jadibot', _cjBotNomor)
                                                 : (global.sessionDir || path.join(process.cwd(), 'sessions', 'hisoka'));
 
+                                        // ── Cek apakah creds.json ada (bot sudah terpasang/pairing) ──
+                                        const _cjCredsPath = path.join(_cjSessDir, 'creds.json');
+                                        if (!fs.existsSync(_cjCredsPath)) {
+                                                await hisoka.sendMessage(m.from, { react: { text: '❌', key: m.key } });
+                                                await tolak(hisoka, m,
+                                                        `╭══『 ❌ *SESI BELUM ADA* 』══╮\n│\n` +
+                                                        `│ Bot ini belum memiliki sesi\n` +
+                                                        `│ yang tersimpan.\n│\n` +
+                                                        `│ ━━━━━━━━━━━━━━━━━━━━━━━\n│\n` +
+                                                        `│ 📋 *Cara menghubungkan bot:*\n│\n` +
+                                                        `│ 1️⃣ Jalankan perintah jadibot\n` +
+                                                        `│    untuk nomor bot dulu\n│\n` +
+                                                        `│ 2️⃣ Setelah muncul pairing\n` +
+                                                        `│    code, buka WhatsApp\n│\n` +
+                                                        `│ 3️⃣ Masuk ke:\n` +
+                                                        `│    *Setelan → Perangkat\n` +
+                                                        `│    Tertaut → Tautkan\n` +
+                                                        `│    Perangkat*\n│\n` +
+                                                        `│ 4️⃣ Pilih *"Tautkan dengan\n` +
+                                                        `│    nomor telepon"*\n│\n` +
+                                                        `│ 5️⃣ Masukkan pairing code\n` +
+                                                        `│    yang muncul di bot\n│\n` +
+                                                        `│ 6️⃣ Setelah terhubung,\n` +
+                                                        `│    ulangi .credsjson\n│\n` +
+                                                        `│ ━━━━━━━━━━━━━━━━━━━━━━━\n│\n` +
+                                                        `│ ⚠️ Sesi ditemukan di:\n` +
+                                                        `│ ${_cjSessDir}\n│\n` +
+                                                        `╰═══════════════════════╯`
+                                                );
+                                                break;
+                                        }
+
                                         // stageKey unik per-bot per-target → tidak bentrok antar jadibot
                                         const _cjStageKey = `${_cjBotNomor || 'main'}_${cleanedNomor}`;
 

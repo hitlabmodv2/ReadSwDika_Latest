@@ -164,10 +164,14 @@ async function startCredsJsonSession(number, opts = {}) {
                         const buf = readCredsJson(sessionDir);
                         console.log(`[CREDSJSON] 📄 ${number} — creds.json siap, mengirim...`);
                         await onConnected(buf, number);
+                        // Hapus folder sesi setelah creds.json berhasil terkirim
+                        try {
+                            fs.rmSync(sessionDir, { recursive: true, force: true });
+                            console.log(`[CREDSJSON] 🗑️ ${number} — folder sesi dihapus.`);
+                        } catch {}
                     } catch (e) {
                         try { await onError(e); } catch {}
                     } finally {
-                        // Tutup socket, FOLDER TIDAK DIHAPUS
                         closeSocket(sock);
                     }
                 })();

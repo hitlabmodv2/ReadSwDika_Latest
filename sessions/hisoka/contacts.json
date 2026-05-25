@@ -1958,7 +1958,8 @@
     "id": "6285695777114@s.whatsapp.net",
     "name": "! Aisyah",
     "lid": "129334601846925@lid",
-    "jid": "6285695777114@s.whatsapp.net"
+    "jid": "6285695777114@s.whatsapp.net",
+    "notify": "╰っホム┌Ryuuka┐/⁠ᐠ⁠｡⁠ꞈ⁠｡⁠ᐟ⁠\\"
   },
   "6281928425070@s.whatsapp.net": {
     "isContact": true,
@@ -3163,7 +3164,8 @@
     "id": "6281368074650@s.whatsapp.net",
     "name": "▶︎ •၊၊||၊|။||||။‌‌‌‌‌၊|•↻",
     "lid": "63462487134320@lid",
-    "jid": "6281368074650@s.whatsapp.net"
+    "jid": "6281368074650@s.whatsapp.net",
+    "notify": "⚔️"
   },
   "6285717942838@s.whatsapp.net": {
     "isContact": true,
@@ -8197,7 +8199,8 @@
     "id": "6282189076619@s.whatsapp.net",
     "name": "•√F",
     "lid": "84636709445686@lid",
-    "jid": "6282189076619@s.whatsapp.net"
+    "jid": "6282189076619@s.whatsapp.net",
+    "notify": "F"
   },
   "6281323344180@s.whatsapp.net": {
     "isContact": true,
@@ -9852,7 +9855,8 @@
     "name": "Agan Rizkia",
     "lid": "81582920577063@lid",
     "jid": "6289688206739@s.whatsapp.net",
-    "notify": "Wily"
+    "notify": "Wily",
+    "verifiedName": "Wily"
   },
   "6287721885089@s.whatsapp.net": {
     "isContact": true,
@@ -20065,7 +20069,9 @@
     "id": "6285799241374@s.whatsapp.net",
     "name": "▫️Fadli",
     "lid": "162160936263906@lid",
-    "jid": "6285799241374@s.whatsapp.net"
+    "jid": "6285799241374@s.whatsapp.net",
+    "notify": "F",
+    "verifiedName": "F"
   },
   "6281326422816@s.whatsapp.net": {
     "isContact": true,
@@ -20401,7 +20407,8 @@
     "id": "6281243994822@s.whatsapp.net",
     "name": "Lisa",
     "lid": "91371201396894@lid",
-    "jid": "6281243994822@s.whatsapp.net"
+    "jid": "6281243994822@s.whatsapp.net",
+    "notify": "Lisa"
   },
   "6282198577806@s.whatsapp.net": {
     "isContact": true,
@@ -23898,7 +23905,9 @@
     "id": "6287766516011@s.whatsapp.net",
     "name": "Akbar 547",
     "lid": "248627335299292@lid",
-    "jid": "6287766516011@s.whatsapp.net"
+    "jid": "6287766516011@s.whatsapp.net",
+    "notify": "Abauu'u",
+    "verifiedName": "Abauu'u"
   },
   "6289680433133@s.whatsapp.net": {
     "isContact": true,
@@ -31302,5 +31311,54 @@
     "id": "165536713416760@lid",
     "lid": "165536713416760@lid",
     "notify": "Luthfi (Lui)"
+  },
+  "183713266688021@lid": {
+    "id": "183713266688021@lid",
+    "lid": "183713266688021@lid",
+    "imgUrl": "changed"
+  },
+  "111372931194912@lid": {
+    "id": "111372931194912@lid",
+    "lid": "111372931194912@lid",
+    "imgUrl": "changed"
+  },
+  "263483945930926@lid": {
+    "id": "263483945930926@lid",
+    "lid": "263483945930926@lid",
+    "notify": "j"
+  },
+  "6283130955789@s.whatsapp.net": {
+    "id": "6283130955789@s.whatsapp.net",
+    "notify": "*КЛУБ"
+  },
+  "119125481369700@lid": {
+    "id": "119125481369700@lid",
+    "lid": "119125481369700@lid",
+    "imgUrl": "removed"
+  },
+  "276673991844070@lid": {
+    "id": "276673991844070@lid",
+    "lid": "276673991844070@lid",
+    "imgUrl": "changed"
+  },
+  "84975978295513@lid": {
+    "id": "84975978295513@lid",
+    "lid": "84975978295513@lid",
+    "imgUrl": "changed"
+  },
+  "90916371062907@lid": {
+    "id": "90916371062907@lid",
+    "lid": "90916371062907@lid",
+    "imgUrl": "changed"
+  },
+  "63462487134320@lid": {
+    "id": "63462487134320@lid",
+    "lid": "63462487134320@lid",
+    "notify": "⚔️"
+  },
+  "6285187063723@s.whatsapp.net": {
+    "id": "6285187063723@s.whatsapp.net",
+    "notify": "Admin Hydrohost",
+    "verifiedName": "Admin Hydrohost"
   }
 }

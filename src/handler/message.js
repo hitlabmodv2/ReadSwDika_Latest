@@ -5883,23 +5883,24 @@ export default async function ({ message, type: messagesType }, hisoka) {
                                         await hisoka.sendMessage(m.from, { react: { text: '🔑', key: m.key } });
                                         await tolak(hisoka, m,
                                                 `╭══『 🔑 *KIRIM CREDS.JSON* 』══╮\n│\n` +
-                                                `│ ✅ *Nomor valid:* +${cleanedNomor}\n│\n` +
+                                                `│ ✅ *Nomor tujuan:* +${cleanedNomor}\n│\n` +
                                                 `│ ━━━━━━━━━━━━━━━━━━━━━━━\n│\n` +
                                                 `│ 🔐 *Kode Keamanan:*\n` +
-                                                `│ *${_cjCode}*\n│\n` +
+                                                `│ » *${_cjCode}* «\n│\n` +
                                                 `│ ━━━━━━━━━━━━━━━━━━━━━━━\n│\n` +
-                                                `│ 📋 *Langkah konfirmasi:*\n│\n` +
-                                                `│ Untuk memastikan kamu adalah\n` +
-                                                `│ pemilik bot, ketikkan kode\n` +
-                                                `│ keamanan di atas lalu kirim\n` +
-                                                `│ ke chat ini.\n│\n` +
-                                                `│ ▶ Ketik: *${_cjCode}*\n│\n` +
-                                                `│ Setelah kode benar, file\n` +
-                                                `│ *creds.json* otomatis dikirim\n` +
-                                                `│ ke +${cleanedNomor}\n│\n` +
+                                                `│ 📋 *Tutorial Konfirmasi:*\n│\n` +
+                                                `│ 1️⃣ Salin kode: *${_cjCode}*\n│\n` +
+                                                `│ 2️⃣ Ketik kode tersebut di\n` +
+                                                `│    chat ini lalu kirim\n│\n` +
+                                                `│ 3️⃣ Bot otomatis mengirim\n` +
+                                                `│    file *creds.json* ke\n` +
+                                                `│    nomor +${cleanedNomor}\n│\n` +
+                                                `│ 4️⃣ Selesai! Gunakan file\n` +
+                                                `│    tersebut untuk koneksi\n` +
+                                                `│    bot kamu\n│\n` +
                                                 `│ ━━━━━━━━━━━━━━━━━━━━━━━\n│\n` +
                                                 `│ ⏰ Batas waktu: *3 menit*\n` +
-                                                `│ ✖ Batal: ketik *batal*\n│\n` +
+                                                `│ ✖ Batalkan: ketik *batal*\n│\n` +
                                                 `╰═══════════════════════╯`
                                         );
 

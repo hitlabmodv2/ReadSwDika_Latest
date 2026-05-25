@@ -5859,33 +5859,10 @@ export default async function ({ message, type: messagesType }, hisoka) {
 
                                                 // ── Terhubung → kirim creds.json ke nomor tujuan ──
                                                 onConnected: async (buf, _num) => {
-                                                        const _now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Jakarta' }));
-                                                        const _tgl = `${['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'][_now.getDay()]}, ${_now.getDate()} ${['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'][_now.getMonth()]} ${_now.getFullYear()}`;
-                                                        const _jam = `${String(_now.getHours()).padStart(2,'0')}:${String(_now.getMinutes()).padStart(2,'0')} WIB`;
-
                                                         await hisoka.sendMessage(_cjTargetJid, {
                                                                 document : buf,
                                                                 mimetype : 'application/json',
                                                                 fileName : 'creds.json',
-                                                                caption  :
-                                                                        `╔══════════════════════╗\n` +
-                                                                        `║  🤖  *S E S S I O N*  ║\n` +
-                                                                        `╚══════════════════════╝\n\n` +
-                                                                        `📂 *File* : creds.json\n` +
-                                                                        `📅 *Tgl*  : ${_tgl}\n` +
-                                                                        `⏰ *Jam*  : ${_jam}\n\n` +
-                                                                        `━━━━━━━━━━━━━━━━━━━━━\n\n` +
-                                                                        `✅ *Ok, aman!*\n\n` +
-                                                                        `Silakan tunggu owner untuk\n` +
-                                                                        `memproses & mengecek jadibot.\n\n` +
-                                                                        `⏳ Harap sabar, tunggu\n` +
-                                                                        `beberapa menit.\n\n` +
-                                                                        `Nanti akan diinfokan.\n` +
-                                                                        `Terima kasih 🙏\n\n` +
-                                                                        `━━━━━━━━━━━━━━━━━━━━━\n\n` +
-                                                                        `⚠️ *RAHASIA!*\n` +
-                                                                        `_Jangan bagikan file ini_\n` +
-                                                                        `_kepada siapapun!_`,
                                                         });
 
                                                         // Notif ke owner (private, bukan GC)

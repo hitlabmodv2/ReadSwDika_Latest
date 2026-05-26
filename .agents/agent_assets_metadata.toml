@@ -227,3 +227,9 @@ id = "ECd_nzm3bQgnJWqeeoNKn"
 uri = "file://lagu_1_Hujan_Terakhir.mp3"
 type = "audio"
 title = "Hujan Terakhir — Pop Ballad"
+
+[[outputs]]
+id = "7BBnzNW1e84qO5_sMTPOS"
+uri = "file://lagu_anime_dungeon.mp3"
+type = "audio"
+title = "Cahaya yang Kutitipkan — Anime OST Dungeon Sad Piano"

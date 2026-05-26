@@ -2288,7 +2288,9 @@
     "id": "6283134844523@s.whatsapp.net",
     "name": "Hamdan",
     "lid": "239328697536578@lid",
-    "jid": "6283134844523@s.whatsapp.net"
+    "jid": "6283134844523@s.whatsapp.net",
+    "notify": "Anda Siapa?",
+    "verifiedName": "Anda Siapa?"
   },
   "6282292807007@s.whatsapp.net": {
     "isContact": true,

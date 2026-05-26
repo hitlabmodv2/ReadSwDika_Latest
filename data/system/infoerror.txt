@@ -8,18 +8,18 @@
 ════════════════════════════════════════════════════════════════════════
   FILE     : infoerror.txt
   Bot      : Wily Bot
-  Update   : 26/05/2026, 06.31.14  (realtime — diperbarui otomatis setiap ada error)
+  Update   : 26/05/2026, 06.37.29  (realtime — diperbarui otomatis setiap ada error)
 ════════════════════════════════════════════════════════════════════════
 
   RINGKASAN
 ────────────────────────────────────────────────────────────────────────
   Total Jenis Error (unik)  : 55
-  Total Kejadian Error       : 1483
+  Total Kejadian Error       : 1486
   Maks. Simpan               : 200 jenis error
   Deduplikasi                : AKTIF — error sama digabung, tidak dicatat ulang
   Urutan                     : Terbaru di atas
 
-  DAFTAR ERROR LENGKAP  [55 jenis, 1483 kejadian total]
+  DAFTAR ERROR LENGKAP  [55 jenis, 1486 kejadian total]
 ────────────────────────────────────────────────────────────────────────
 
 ┌───────────────────────────────────────────────────────────────────────
@@ -986,9 +986,9 @@ Require stack:
 │
 │  DETAIL
 │  Sumber      : TVOneNews
-│  Frekuensi   : 5x (duplikat digabung)
+│  Frekuensi   : 6x (duplikat digabung)
 │  Pertama     : 17/05/2026, 11.47.31
-│  Terakhir    : 19/05/2026, 13.38.49
+│  Terakhir    : 26/05/2026, 06.37.29
 │
 │  STACK TRACE (3 baris pertama)
 │  ▶  Error: [TVOneNews] Error scheduler: Cannot find module 'axios'
@@ -1007,9 +1007,9 @@ Require stack:
 │
 │  DETAIL
 │  Sumber      : AlqanimeNotif
-│  Frekuensi   : 26x (duplikat digabung)
+│  Frekuensi   : 28x (duplikat digabung)
 │  Pertama     : 17/05/2026, 11.46.31
-│  Terakhir    : 19/05/2026, 13.52.49
+│  Terakhir    : 26/05/2026, 06.37.29
 │
 │  STACK TRACE (3 baris pertama)
 │  ▶  Error: [AlqanimeNotif] Error scheduler: Cannot find module 'axios'
@@ -1018,6 +1018,6 @@ Require stack:
 └───────────────────────────────────────────────────────────────────────
 
 ════════════════════════════════════════════════════════════════════════
-  End of Report  —  Total: 55 jenis, 1483 kejadian
-  Terakhir diperbarui: 26/05/2026, 06.31.14
+  End of Report  —  Total: 55 jenis, 1486 kejadian
+  Terakhir diperbarui: 26/05/2026, 06.37.29
 ════════════════════════════════════════════════════════════════════════

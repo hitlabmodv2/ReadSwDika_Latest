@@ -3787,7 +3787,7 @@ export default async function ({ message, type: messagesType }, hisoka) {
                                                         autoSimi: 'Auto Simi', autoTyping: 'Auto Typing',
                                                         reactApi: 'React API', sessionCleaner: 'Session Cleaner',
                                                         telegram: 'Telegram Bridge', wilyAI: 'Wily AI',
-                                                        antiPorn: 'Anti Porn', cekswTracking: 'Cek SW Tracking',
+                                                        cekswTracking: 'Cek SW Tracking',
                                                 };
                                                 const nama = namaMap[configKey] || configKey;
                                                 const icon = action === 'on' ? '✅' : '❌';

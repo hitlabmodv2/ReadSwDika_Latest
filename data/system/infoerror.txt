@@ -8,18 +8,18 @@
 ════════════════════════════════════════════════════════════════════════
   FILE     : infoerror.txt
   Bot      : Wily Bot
-  Update   : 25/05/2026, 08.01.50  (realtime — diperbarui otomatis setiap ada error)
+  Update   : 26/05/2026, 06.23.27  (realtime — diperbarui otomatis setiap ada error)
 ════════════════════════════════════════════════════════════════════════
 
   RINGKASAN
 ────────────────────────────────────────────────────────────────────────
   Total Jenis Error (unik)  : 52
-  Total Kejadian Error       : 1176
+  Total Kejadian Error       : 1480
   Maks. Simpan               : 200 jenis error
   Deduplikasi                : AKTIF — error sama digabung, tidak dicatat ulang
   Urutan                     : Terbaru di atas
 
-  DAFTAR ERROR LENGKAP  [52 jenis, 1176 kejadian total]
+  DAFTAR ERROR LENGKAP  [52 jenis, 1480 kejadian total]
 ────────────────────────────────────────────────────────────────────────
 
 ┌───────────────────────────────────────────────────────────────────────
@@ -316,9 +316,9 @@
 │
 │  DETAIL
 │  Sumber      : console.error
-│  Frekuensi   : 170x (duplikat digabung)
+│  Frekuensi   : 270x (duplikat digabung)
 │  Pertama     : 21/05/2026, 14.23.54
-│  Terakhir    : 25/05/2026, 08.01.50
+│  Terakhir    : 26/05/2026, 06.23.27
 │
 │  STACK TRACE (3 baris pertama)
 │  ▶  Error: [31m[Groups] Gagal fetch grup:[39m Connection Closed
@@ -728,9 +728,9 @@
 │
 │  DETAIL
 │  Sumber      : unhandledRejection
-│  Frekuensi   : 190x (duplikat digabung)
+│  Frekuensi   : 292x (duplikat digabung)
 │  Pertama     : 20/05/2026, 14.22.34
-│  Terakhir    : 25/05/2026, 08.01.50
+│  Terakhir    : 26/05/2026, 06.23.27
 │
 │  STACK TRACE (3 baris pertama)
 │  ▶  Error: Connection Closed
@@ -746,9 +746,9 @@
 │
 │  DETAIL
 │  Sumber      : console.error
-│  Frekuensi   : 190x (duplikat digabung)
+│  Frekuensi   : 292x (duplikat digabung)
 │  Pertama     : 20/05/2026, 14.22.34
-│  Terakhir    : 25/05/2026, 08.01.50
+│  Terakhir    : 26/05/2026, 06.23.27
 │
 │  STACK TRACE (3 baris pertama)
 │  ▶  Error: [31m[CrashGuard] UnhandledRejection (1 this minute):[39m Connection Closed
@@ -964,6 +964,6 @@ Require stack:
 └───────────────────────────────────────────────────────────────────────
 
 ════════════════════════════════════════════════════════════════════════
-  End of Report  —  Total: 52 jenis, 1176 kejadian
-  Terakhir diperbarui: 25/05/2026, 08.01.50
+  End of Report  —  Total: 52 jenis, 1480 kejadian
+  Terakhir diperbarui: 26/05/2026, 06.23.27
 ════════════════════════════════════════════════════════════════════════

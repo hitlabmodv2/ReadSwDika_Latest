@@ -166,20 +166,9 @@
       }
     }
   },
-  "antiPorn": {
-    "enabled": false,
-    "groups": [
-      "120363419402989015@g.us",
-      "120363383540766761@g.us",
-      "120363192554714254@g.us"
-    ]
-  },
   "cekautoTimestamps": {
     "antiTagSWGrup": {
       "120363192554714254@g.us": 1779179527767
-    },
-    "antipornGrup": {
-      "120363192554714254@g.us": 1779520926392
     }
   },
   "autoSholat": {

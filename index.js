@@ -1885,18 +1885,6 @@ setTimeout(() => {
                 }
         }); // sampe sini
 
-        hisoka.ev.on('messages.upsert', messagesUpsertAntiPorn => {
-                if (messagesUpsertAntiPorn.type !== 'notify') return;
-                for (const message of messagesUpsertAntiPorn.messages) {
-                        if (!message?.key?.id || message.key?.fromMe) continue;
-                        const antiPornHandler = getHandler('antiporn');
-                        if (typeof antiPornHandler === 'function') {
-                                Promise.resolve(
-                                        antiPornHandler(message, hisoka)
-                                ).catch(err => console.error('[AntiPorn]', err.message));
-                        }
-                }
-        });
 
         hisoka.ev.on('call', async calls => {
                 for (const call of calls) {

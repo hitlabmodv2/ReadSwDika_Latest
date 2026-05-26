@@ -8,18 +8,18 @@
 ════════════════════════════════════════════════════════════════════════
   FILE     : infoerror.txt
   Bot      : Wily Bot
-  Update   : 26/05/2026, 06.37.29  (realtime — diperbarui otomatis setiap ada error)
+  Update   : 26/05/2026, 06.37.44  (realtime — diperbarui otomatis setiap ada error)
 ════════════════════════════════════════════════════════════════════════
 
   RINGKASAN
 ────────────────────────────────────────────────────────────────────────
   Total Jenis Error (unik)  : 55
-  Total Kejadian Error       : 1486
+  Total Kejadian Error       : 1487
   Maks. Simpan               : 200 jenis error
   Deduplikasi                : AKTIF — error sama digabung, tidak dicatat ulang
   Urutan                     : Terbaru di atas
 
-  DAFTAR ERROR LENGKAP  [55 jenis, 1486 kejadian total]
+  DAFTAR ERROR LENGKAP  [55 jenis, 1487 kejadian total]
 ────────────────────────────────────────────────────────────────────────
 
 ┌───────────────────────────────────────────────────────────────────────
@@ -965,9 +965,9 @@ Require stack:
 │
 │  DETAIL
 │  Sumber      : MALNews
-│  Frekuensi   : 6x (duplikat digabung)
+│  Frekuensi   : 7x (duplikat digabung)
 │  Pertama     : 17/05/2026, 11.47.46
-│  Terakhir    : 19/05/2026, 14.20.50
+│  Terakhir    : 26/05/2026, 06.37.44
 │
 │  STACK TRACE (3 baris pertama)
 │  ▶  Error: [MALNews] Error scheduler: Cannot find module 'axios'
@@ -1018,6 +1018,6 @@ Require stack:
 └───────────────────────────────────────────────────────────────────────
 
 ════════════════════════════════════════════════════════════════════════
-  End of Report  —  Total: 55 jenis, 1486 kejadian
-  Terakhir diperbarui: 26/05/2026, 06.37.29
+  End of Report  —  Total: 55 jenis, 1487 kejadian
+  Terakhir diperbarui: 26/05/2026, 06.37.44
 ════════════════════════════════════════════════════════════════════════

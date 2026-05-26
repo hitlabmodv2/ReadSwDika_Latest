@@ -221,3 +221,9 @@ id = "uCkWYBC0oNwsko1UGwY0H"
 uri = "file://lagu_sedih_pop.mp3"
 type = "audio"
 title = "Jejak yang Tertinggal — Pop Ballad AI"
+
+[[outputs]]
+id = "ECd_nzm3bQgnJWqeeoNKn"
+uri = "file://lagu_1_Hujan_Terakhir.mp3"
+type = "audio"
+title = "Hujan Terakhir — Pop Ballad"

@@ -13400,7 +13400,8 @@
     "id": "6281374976765@s.whatsapp.net",
     "name": "√tita💅",
     "lid": "195713338183899@lid",
-    "jid": "6281374976765@s.whatsapp.net"
+    "jid": "6281374976765@s.whatsapp.net",
+    "notify": "."
   },
   "6283128210499@s.whatsapp.net": {
     "isContact": true,
@@ -25407,7 +25408,8 @@
     "id": "6282139672290@s.whatsapp.net",
     "name": "Ananda",
     "lid": "164746439479432@lid",
-    "jid": "6282139672290@s.whatsapp.net"
+    "jid": "6282139672290@s.whatsapp.net",
+    "notify": "Nixel"
   },
   "628877113259@s.whatsapp.net": {
     "isContact": true,
@@ -31424,5 +31426,14 @@
     "id": "148176690487548@lid",
     "lid": "148176690487548@lid",
     "imgUrl": "removed"
+  },
+  "6288279119895@s.whatsapp.net": {
+    "id": "6288279119895@s.whatsapp.net",
+    "notify": "~ Tambang Nikel"
+  },
+  "127393243132132@lid": {
+    "id": "127393243132132@lid",
+    "lid": "127393243132132@lid",
+    "notify": "(T)ipii kinetik"
   }
 }

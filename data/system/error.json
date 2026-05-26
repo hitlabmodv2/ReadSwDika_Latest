@@ -1,6 +1,33 @@
 {
   "errors": [
     {
+      "fingerprint": "console.error::\u001b[Nm[HotReload] Tidak bisa watch 'src/handler/antiporn.js':\u001b[Nm ENOENT: no such file or directory, watch '/home/runner/w",
+      "source": "console.error",
+      "message": "\u001b[31m[HotReload] Tidak bisa watch 'src/handler/antiporn.js':\u001b[39m ENOENT: no such file or directory, watch '/home/runner/workspace/src/handler/antiporn.js'",
+      "stack": "Error: \u001b[31m[HotReload] Tidak bisa watch 'src/handler/antiporn.js':\u001b[39m ENOENT: no such file or directory, watch '/home/runner/workspace/src/handler/antiporn.js'\n    at console.error (file:///home/runner/workspace/index.js:366:27)\n    at watchFile (file:///home/runner/workspace/src/helper/hotReload.js:112:17)\n    at Timeout._onTimeout (file:///home/runner/workspace/src/helper/hotReload.js:107:21)\n    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)",
+      "count": 1,
+      "firstSeen": "2026-05-26T06:31:14.136Z",
+      "lastSeen": "2026-05-26T06:31:14.136Z"
+    },
+    {
+      "fingerprint": "console.error::\u001b[Nm[HotReload] ✗ Gagal reload 'src/handler/antiporn.js', pakai versi lama.\u001b[Nm",
+      "source": "console.error",
+      "message": "\u001b[31m[HotReload] ✗ Gagal reload 'src/handler/antiporn.js', pakai versi lama.\u001b[39m",
+      "stack": "Error: \u001b[31m[HotReload] ✗ Gagal reload 'src/handler/antiporn.js', pakai versi lama.\u001b[39m\n    at console.error (file:///home/runner/workspace/index.js:366:27)\n    at Timeout._onTimeout (file:///home/runner/workspace/src/helper/hotReload.js:103:29)\n    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)",
+      "count": 1,
+      "firstSeen": "2026-05-26T06:31:14.127Z",
+      "lastSeen": "2026-05-26T06:31:14.127Z"
+    },
+    {
+      "fingerprint": "console.error::\u001b[Nm[HotReload] Gagal load 'src/handler/antiporn.js':\u001b[Nm Cannot find module '/home/runner/workspace/src/handler/antipor",
+      "source": "console.error",
+      "message": "\u001b[31m[HotReload] Gagal load 'src/handler/antiporn.js':\u001b[39m Cannot find module '/home/runner/workspace/src/handler/antiporn.js' imported from /home/runner/workspace/src/helper/hotReload.js",
+      "stack": "Error: \u001b[31m[HotReload] Gagal load 'src/handler/antiporn.js':\u001b[39m Cannot find module '/home/runner/workspace/src/handler/antiporn.js' imported from /home/runner/workspace/src/helper/hotReload.js\n    at console.error (file:///home/runner/workspace/index.js:366:27)\n    at loadModule (file:///home/runner/workspace/src/helper/hotReload.js:74:17)\n    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)\n    at async Timeout._onTimeout (file:///home/runner/workspace/src/helper/hotReload.js:93:29)",
+      "count": 1,
+      "firstSeen": "2026-05-26T06:31:14.117Z",
+      "lastSeen": "2026-05-26T06:31:14.117Z"
+    },
+    {
       "fingerprint": "unhandledRejection::ENOENT: no such file or directory, open '/home/runner/workspace/sessions/hisoka/creds.json'",
       "source": "unhandledRejection",
       "message": "ENOENT: no such file or directory, open '/home/runner/workspace/sessions/hisoka/creds.json'",

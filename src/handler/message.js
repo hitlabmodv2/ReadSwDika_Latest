@@ -38,7 +38,6 @@ import { logError, formatErrorReport, clearErrors, generateErrorFileTxt, getInfo
 import { startJadibot, startJadibotQR, stopJadibot, jadibotMap, jadibotConnectedAt, pendingJadibotChoices, formatPairingCode, maskNumber, parseJadibotDuration, getJadibotExpiry, formatRemainingTime, getJadibotExpirySummary, cleanupExpiredJadibots, removeJadibotExpiry, setPermanentJadibot, ensureJadibotExpiry, extendJadibotExpiry, scheduleJadibotExpiry } from '../helper/jadibot.js';
 import { hasViewOnceCache, getViewOnceCache } from '../helper/voCache.js';
 import { isAntiTagSWEnabled, toggleAntiTagSW, resetWarnings, getWarnings, getAllAntiTagSWGroups } from './antitagsw.js';
-import { isAntiPornEnabled, toggleAntiPorn, resetAntiPornWarnings, getAntiPornWarnings, getAllAntiPornGroups } from './antiporn.js';
 // yg bawah pindah ke sini
 import { injectMessage } from '../helper/inject.js';
 import listenEvent from './event.js';
@@ -1311,7 +1310,6 @@ const CEKAUTO_FITUR_LIST = [
         { key: 'telegram',       nama: 'Telegram Bridge',  cmd: '.telegram on/off',        type: 'global', toggleKey: 'telegram',       toggleable: true  },
         { key: 'welcomeGoodbye', nama: 'Welcome/Goodbye',  cmd: '.welcome on/off',         type: 'global', toggleable: false             },
         { key: 'wilyAI',         nama: 'Wily AI',          cmd: '.wilyai on/off',          type: 'global', toggleKey: 'wilyAI',         toggleable: true  },
-        { key: 'antiPorn',       nama: 'Anti Porn',        cmd: '.antiporn global on/off', type: 'global', toggleKey: 'antiPorn',       toggleable: true,  checkFn: (cfg) => cfg.antiPorn?.enabled === true || (Array.isArray(cfg.antiPorn?.groups) && cfg.antiPorn.groups.length > 0) },
         { key: 'cekswTracking',  nama: 'Cek SW Tracking',  cmd: '.ceksw on/off',           type: 'custom', toggleKey: 'cekswTracking',  toggleable: true,  checkFn: (cfg) => cfg.cekswTracking !== false },
         { key: 'alqanimenotif',  nama: 'Alqanime Notif',   cmd: '.alqanimenotif on/off',   type: 'group',  toggleable: false             },
         { key: 'animasu',        nama: 'Animasu Notif',    cmd: '.animasu on/off',         type: 'group',  toggleable: false             },
@@ -1355,14 +1353,6 @@ const CEKAUTO_GROUP_FITUR_LIST = [
                 key: 'goodbye', nama: 'Goodbye', cmd: '.goodbye on/off', toggleable: true,
                 desc: 'Kirim pesan perpisahan otomatis saat member keluar atau dikick.',
                 checkFn: (cfg, jid) => cfg.welcomeGoodbye?.groups?.[jid]?.goodbye === true
-        },
-        {
-                key: 'antipornGrup', nama: 'Anti Porn (Grup)', cmd: '.antiporn on/off', toggleable: true,
-                descFn: (cfg) => {
-                        const globalOn = cfg.antiPorn?.enabled === true;
-                        return `Hapus konten +18 di grup. Global: ${globalOn ? '🟢 Aktif' : '🔴 Nonaktif → ketik .antiporn global on'}`;
-                },
-                checkFn: (cfg, jid) => Array.isArray(cfg.antiPorn?.groups) && cfg.antiPorn.groups.includes(jid)
         },
         {
                 key: 'antiTagSWGrup', nama: 'Anti Tag SW (Grup)', cmd: '.antitagsw on/off', toggleable: true,
@@ -1516,7 +1506,6 @@ function getActiveGroupsForFeature(featureKey) {
                 return Object.entries(cfg.welcomeGoodbye?.groups || {})
                         .filter(([, v]) => v?.goodbye === true).map(([jid]) => jid);
         }
-        if (featureKey === 'antipornGrup') return getAllAntiPornGroups();
         if (featureKey === 'antiTagSWGrup') return getAllAntiTagSWGroups();
         return Object.entries(cfg[featureKey]?.groups || {})
                 .filter(([, v]) => v?.enabled === true).map(([jid]) => jid);
@@ -1530,8 +1519,6 @@ function disableFeatureForGroup(featureKey, jid) {
                 if (!cfg.welcomeGoodbye.groups[jid]) cfg.welcomeGoodbye.groups[jid] = {};
                 cfg.welcomeGoodbye.groups[jid][featureKey] = false;
                 saveConfig(cfg);
-        } else if (featureKey === 'antipornGrup') {
-                toggleAntiPorn(jid, false);
         } else if (featureKey === 'antiTagSWGrup') {
                 toggleAntiTagSW(jid, false);
         } else {
@@ -1552,7 +1539,7 @@ async function sendCekautoGrupSelectMsg(hisoka, m, featureKey) {
                 infowibu: 'Info Wibu', animasu: 'Animasu Notif',
                 alqanimenotif: 'Alqanime Notif', tvonenews: 'TV One News',
                 malnews: 'MAL News', welcome: 'Welcome',
-                goodbye: 'Goodbye', antipornGrup: 'Anti Porn (Grup)',
+                goodbye: 'Goodbye',
                 antiTagSWGrup: 'Anti Tag SW (Grup)',
         };
         const namFitur = namaMapSel[featureKey] || featureKey;
@@ -3833,9 +3820,6 @@ export default async function ({ message, type: messagesType }, hisoka) {
                                                         cfgGrup.welcomeGoodbye.groups[jidGrup][featureKey] = enable;
                                                         saveConfig(cfgGrup);
                                                         if (enable) saveCekautoTimestamp(featureKey, jidGrup);
-                                                } else if (featureKey === 'antipornGrup') {
-                                                        toggleAntiPorn(jidGrup, enable);
-                                                        if (enable) saveCekautoTimestamp('antipornGrup', jidGrup);
                                                 } else if (featureKey === 'antiTagSWGrup') {
                                                         toggleAntiTagSW(jidGrup, enable);
                                                         if (enable) saveCekautoTimestamp('antiTagSWGrup', jidGrup);
@@ -3850,7 +3834,7 @@ export default async function ({ message, type: messagesType }, hisoka) {
                                                         infowibu: 'Info Wibu', animasu: 'Animasu Notif',
                                                         alqanimenotif: 'Alqanime Notif', tvonenews: 'TV One News',
                                                         malnews: 'MAL News', welcome: 'Welcome',
-                                                        goodbye: 'Goodbye', antipornGrup: 'Anti Porn (Grup)',
+                                                        goodbye: 'Goodbye',
                                                         antiTagSWGrup: 'Anti Tag SW (Grup)',
                                                 };
                                                 const icon = enable ? '✅' : '❌';
@@ -3891,8 +3875,6 @@ export default async function ({ message, type: messagesType }, hisoka) {
                                                 if (!cfgAll.welcomeGoodbye.groups) cfgAll.welcomeGoodbye.groups = {};
                                                 if (!cfgAll.welcomeGoodbye.groups[jidAll]) cfgAll.welcomeGoodbye.groups[jidAll] = {};
                                                 cfgAll.welcomeGoodbye.groups[jidAll][f.key] = true;
-                                        } else if (f.key === 'antipornGrup') {
-                                                toggleAntiPorn(jidAll, true);
                                         } else if (f.key === 'antiTagSWGrup') {
                                                 toggleAntiTagSW(jidAll, true);
                                         } else {
@@ -3924,8 +3906,6 @@ export default async function ({ message, type: messagesType }, hisoka) {
                                                 if (cfgOff.welcomeGoodbye?.groups?.[jidOff]) {
                                                         cfgOff.welcomeGoodbye.groups[jidOff][f.key] = false;
                                                 }
-                                        } else if (f.key === 'antipornGrup') {
-                                                toggleAntiPorn(jidOff, false);
                                         } else if (f.key === 'antiTagSWGrup') {
                                                 toggleAntiTagSW(jidOff, false);
                                         } else {
@@ -3958,7 +3938,7 @@ export default async function ({ message, type: messagesType }, hisoka) {
                                                         infowibu: 'Info Wibu', animasu: 'Animasu Notif',
                                                         alqanimenotif: 'Alqanime Notif', tvonenews: 'TV One News',
                                                         malnews: 'MAL News', welcome: 'Welcome',
-                                                        goodbye: 'Goodbye', antipornGrup: 'Anti Porn (Grup)',
+                                                        goodbye: 'Goodbye',
                                                         antiTagSWGrup: 'Anti Tag SW (Grup)',
                                                 };
                                                 let grupNama = targetJid;
@@ -4005,7 +3985,7 @@ export default async function ({ message, type: messagesType }, hisoka) {
                                                 infowibu: 'Info Wibu', animasu: 'Animasu Notif',
                                                 alqanimenotif: 'Alqanime Notif', tvonenews: 'TV One News',
                                                 malnews: 'MAL News', welcome: 'Welcome',
-                                                goodbye: 'Goodbye', antipornGrup: 'Anti Porn (Grup)',
+                                                goodbye: 'Goodbye',
                                                 antiTagSWGrup: 'Anti Tag SW (Grup)',
                                         };
                                         const grupNamaList = [];
@@ -4058,9 +4038,6 @@ export default async function ({ message, type: messagesType }, hisoka) {
                                                         cfgRe.welcomeGoodbye.groups[targetJid][featureKey] = true;
                                                         saveConfig(cfgRe);
                                                         saveCekautoTimestamp(featureKey, targetJid);
-                                                } else if (featureKey === 'antipornGrup') {
-                                                        toggleAntiPorn(targetJid, true);
-                                                        saveCekautoTimestamp('antipornGrup', targetJid);
                                                 } else if (featureKey === 'antiTagSWGrup') {
                                                         toggleAntiTagSW(targetJid, true);
                                                         saveCekautoTimestamp('antiTagSWGrup', targetJid);
@@ -4074,7 +4051,7 @@ export default async function ({ message, type: messagesType }, hisoka) {
                                                         infowibu: 'Info Wibu', animasu: 'Animasu Notif',
                                                         alqanimenotif: 'Alqanime Notif', tvonenews: 'TV One News',
                                                         malnews: 'MAL News', welcome: 'Welcome',
-                                                        goodbye: 'Goodbye', antipornGrup: 'Anti Porn (Grup)',
+                                                        goodbye: 'Goodbye',
                                                         antiTagSWGrup: 'Anti Tag SW (Grup)',
                                                 };
                                                 let grupNamaRe = targetJid;
@@ -4125,7 +4102,7 @@ export default async function ({ message, type: messagesType }, hisoka) {
                                                 infowibu: 'Info Wibu', animasu: 'Animasu Notif',
                                                 alqanimenotif: 'Alqanime Notif', tvonenews: 'TV One News',
                                                 malnews: 'MAL News', welcome: 'Welcome',
-                                                goodbye: 'Goodbye', antipornGrup: 'Anti Porn (Grup)',
+                                                goodbye: 'Goodbye',
                                                 antiTagSWGrup: 'Anti Tag SW (Grup)',
                                         };
                                         await hisoka.sendMessage(m.from, { react: { text: '⏳', key: m.key } });
@@ -4136,12 +4113,6 @@ export default async function ({ message, type: messagesType }, hisoka) {
                                                 for (const jid of allJids) {
                                                         toggleAntiTagSW(jid, true);
                                                         saveCekautoTimestamp('antiTagSWGrup', jid);
-                                                        count++;
-                                                }
-                                        } else if (featureKey === 'antipornGrup') {
-                                                for (const jid of allJids) {
-                                                        toggleAntiPorn(jid, true);
-                                                        saveCekautoTimestamp('antipornGrup', jid);
                                                         count++;
                                                 }
                                         } else if (featureKey === 'welcome' || featureKey === 'goodbye') {
@@ -9065,7 +9036,6 @@ ${ownerNum ? `📞 *Owner    :* wa.me/${ownerNum}` : ''}
 │   ├ *.anticallvid msg [teks]*
 │   ├ *.anticallvid add/del [nomor]*
 │   ╰ *.anticallvid list*
-├➤ *.antiporn on/off*
 ╰➤ *.antitagsw on/off*
    ├ *.antitagsw global on/off*
    ├ *.antitagsw status*
@@ -9288,7 +9258,6 @@ antidel | antidel private/group/all on/off
 antidel sendto self/chat/both
 anticall (.ac) | anticall msg/add/del/list
 anticallvid (.acv) | anticallvid msg/add/del/list
-antiporn
 antitagsw | antitagsw global on/off | antitagsw status/reset
 
 「 💬 *PESAN & STICKER* 」
@@ -9404,9 +9373,6 @@ cekerror | cekerror reset | contact
 │   ├ *.anticallvid msg [teks]*
 │   ├ *.anticallvid add/del [nomor]*
 │   ╰ *.anticallvid list*
-│
-├➤ *.antiporn on/off*
-│   _Blokir konten pornografi otomatis_
 │
 ╰➤ *.antitagsw on/off*  _[khusus grup]_
    _Blokir tag spam di story_
@@ -14970,135 +14936,6 @@ hasil += `╰══════════════════════�
                                                 (m.isOwner ?
                                                 `│ • *.antitagsw global on*  → Aktifkan global\n` +
                                                 `│ • *.antitagsw global off* → Nonaktifkan global\n` : '') +
-                                                `│\n` +
-                                                `╰────────────────────────────────────╯`;
-
-                                        await tolak(hisoka, m, statusText);
-                                }
-                                break;
-                        }
-
-                        case 'antiporn': {
-                                if (!m.isGroup) return tolak(hisoka, m, '❌ Fitur ini hanya bisa digunakan di grup!');
-                                if (!m.isAdmin && !m.isOwner) return tolak(hisoka, m, '❌ Hanya admin grup atau owner bot yang bisa menggunakan perintah ini!');
-
-                                const argAp = (query || '').trim().toLowerCase();
-
-                                if (argAp === 'global on') {
-                                        if (!m.isOwner) return tolak(hisoka, m, '❌ Hanya owner bot yang bisa mengubah pengaturan global!');
-                                        const config = loadConfig();
-                                        if (!config.antiPorn) config.antiPorn = {};
-                                        config.antiPorn.enabled = true;
-                                        saveConfig(config);
-                                        await tolak(hisoka, m,
-                                                `╭───〔 *🌐 ANTIPORN GLOBAL* 〕───╮\n` +
-                                                `│\n` +
-                                                `│ ✅ *Global AntiPorn DIAKTIFKAN!*\n` +
-                                                `│\n` +
-                                                `│ ℹ️ Sekarang admin grup bisa\n` +
-                                                `│    mengaktifkan fitur ini di\n` +
-                                                `│    masing-masing grup.\n` +
-                                                `│\n` +
-                                                `╰────────────────────────────────────╯`
-                                        );
-                                        logCommand(m, hisoka, 'antiporn global on');
-                                } else if (argAp === 'global off') {
-                                        if (!m.isOwner) return tolak(hisoka, m, '❌ Hanya owner bot yang bisa mengubah pengaturan global!');
-                                        const config = loadConfig();
-                                        if (!config.antiPorn) config.antiPorn = {};
-                                        config.antiPorn.enabled = false;
-                                        saveConfig(config);
-                                        await tolak(hisoka, m,
-                                                `╭───〔 *🌐 ANTIPORN GLOBAL* 〕───╮\n` +
-                                                `│\n` +
-                                                `│ 🔴 *Global AntiPorn DINONAKTIFKAN!*\n` +
-                                                `│\n` +
-                                                `│ ℹ️ Fitur ini tidak akan aktif\n` +
-                                                `│    di semua grup meskipun sudah\n` +
-                                                `│    di-on per grup.\n` +
-                                                `│\n` +
-                                                `╰────────────────────────────────────╯`
-                                        );
-                                        logCommand(m, hisoka, 'antiporn global off');
-                                } else if (argAp === 'on' || argAp === 'add') {
-                                        const config = loadConfig();
-                                        let globalAutoEnabled = false;
-                                        if (!config.antiPorn?.enabled) {
-                                                if (!m.isOwner) {
-                                                        return tolak(hisoka, m, '❌ Fitur AntiPorn dinonaktifkan secara global oleh owner bot.\nMinta owner aktifkan dengan perintah: *.antiporn global on*');
-                                                }
-                                                if (!config.antiPorn) config.antiPorn = {};
-                                                config.antiPorn.enabled = true;
-                                                saveConfig(config);
-                                                globalAutoEnabled = true;
-                                        }
-                                        toggleAntiPorn(m.from, true);
-                                        saveCekautoTimestamp('antipornGrup', m.from);
-                                        await sendConfirmWithButtons(hisoka, m,
-                                                `╭───〔 *✅ ANTI-PORN SYSTEM* 〕───╮\n` +
-                                                `│\n` +
-                                                `│ 🟢 *Fitur AntiPorn AKTIF!*\n` +
-                                                (globalAutoEnabled ? `│ 🌐 *Global juga diaktifkan otomatis!*\n` : '') +
-                                                `│\n` +
-                                                `│ 📌 ID Grup tersimpan di config.json\n` +
-                                                `│\n` +
-                                                `│ ⚙️ Konfigurasi:\n` +
-                                                `│ • Maks. warning: *${config.antiPorn?.maxWarnings ?? 10}x*\n` +
-                                                `│ • Threshold AI : *${((config.antiPorn?.threshold ?? 0.50) * 100).toFixed(0)}%*\n` +
-                                                `│\n` +
-                                                `│ ℹ️ Gambar/stiker/video 18+ akan\n` +
-                                                `│    dihapus & pelanggar diperingatkan!\n` +
-                                                `│\n` +
-                                                `╰────────────────────────────────────╯`,
-                                                [{ text: '➕ Aktifkan Semua Grup', id: '__addallgrp__antipornGrup' }]
-                                        );
-                                        logCommand(m, hisoka, `antiporn ${argAp}`);
-                                } else if (argAp === 'off') {
-                                        toggleAntiPorn(m.from, false);
-                                        await tolak(hisoka, m,
-                                                `╭───〔 *❌ ANTI-PORN SYSTEM* 〕───╮\n` +
-                                                `│\n` +
-                                                `│ 🔴 *Fitur AntiPorn NONAKTIF!*\n` +
-                                                `│\n` +
-                                                `│ ℹ️ Semua warning di grup ini\n` +
-                                                `│    juga telah direset.\n` +
-                                                `│\n` +
-                                                `╰────────────────────────────────────╯`
-                                        );
-                                        logCommand(m, hisoka, 'antiporn off');
-                                } else if (argAp === 'reset') {
-                                        resetAntiPornWarnings(m.from);
-                                        await tolak(hisoka, m, '✅ Semua warning AntiPorn di grup ini telah direset!');
-                                        logCommand(m, hisoka, 'antiporn reset');
-                                } else {
-                                        const config = loadConfig();
-                                        const isEnabled = isAntiPornEnabled(m.from);
-                                        const globalEnabled = config.antiPorn?.enabled ?? false;
-                                        const warnings = getAntiPornWarnings(m.from);
-                                        const totalWarned = Object.keys(warnings).length;
-
-                                        const statusText =
-                                                `╭───〔 *ℹ️ ANTI-PORN SYSTEM* 〕───╮\n` +
-                                                `│\n` +
-                                                `│ 🌐 Global   : ${globalEnabled ? '🟢 Aktif' : '🔴 Nonaktif'}\n` +
-                                                `│ 📌 Grup ini : ${isEnabled ? '🟢 Aktif' : '🔴 Nonaktif'}\n` +
-                                                `│\n` +
-                                                `│ ⚙️ Konfigurasi:\n` +
-                                                `│ • Maks. warning: *${config.antiPorn?.maxWarnings ?? 3}x*\n` +
-                                                `│ • Threshold AI : *${((config.antiPorn?.threshold ?? 0.65) * 100).toFixed(0)}%*\n` +
-                                                `│ • Member warned: *${totalWarned} orang*\n` +
-                                                `│\n` +
-                                                `│ 🔍 Mendeteksi: Gambar • Stiker • Video\n` +
-                                                `│ 🤖 Engine: nsfwjs (TensorFlow.js)\n` +
-                                                `│\n` +
-                                                `│ 📋 Cara penggunaan:\n` +
-                                                `│ • *.antiporn add*   → Aktifkan & simpan ke config\n` +
-                                                `│ • *.antiporn on*    → Aktifkan\n` +
-                                                `│ • *.antiporn off*   → Nonaktifkan\n` +
-                                                `│ • *.antiporn reset* → Reset warning\n` +
-                                                (m.isOwner ?
-                                                `│ • *.antiporn global on*  → Aktifkan global\n` +
-                                                `│ • *.antiporn global off* → Nonaktifkan global\n` : '') +
                                                 `│\n` +
                                                 `╰────────────────────────────────────╯`;
 

@@ -215,3 +215,9 @@ id = "DudqX81ro2KHLHiBiUrrN"
 uri = "file://img/sholat/isya.jpg"
 type = "image"
 title = "Isya"
+
+[[outputs]]
+id = "uCkWYBC0oNwsko1UGwY0H"
+uri = "file://lagu_sedih_pop.mp3"
+type = "audio"
+title = "Jejak yang Tertinggal — Pop Ballad AI"

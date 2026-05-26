@@ -8357,7 +8357,8 @@
     "id": "62882007407746@s.whatsapp.net",
     "name": "√Afass",
     "lid": "69849254518919@lid",
-    "jid": "62882007407746@s.whatsapp.net"
+    "jid": "62882007407746@s.whatsapp.net",
+    "notify": "𝘼𝙛𝙖𝙨𝙨"
   },
   "6282143067466@s.whatsapp.net": {
     "isContact": true,
@@ -12800,7 +12801,8 @@
     "id": "6281393564657@s.whatsapp.net",
     "name": "Yus ( Donasi Jadi Bot )",
     "lid": "174577888038922@lid",
-    "jid": "6281393564657@s.whatsapp.net"
+    "jid": "6281393564657@s.whatsapp.net",
+    "notify": "γυς ρου"
   },
   "6281272625255@s.whatsapp.net": {
     "isContact": true,
@@ -24521,7 +24523,7 @@
     "name": "▫️Dinda",
     "lid": "142696211599405@lid",
     "jid": "62895704334234@s.whatsapp.net",
-    "notify": "☁️"
+    "notify": "dnda👇🏻"
   },
   "6281350935583@s.whatsapp.net": {
     "isContact": true,
@@ -31288,7 +31290,7 @@
   "142696211599405@lid": {
     "id": "142696211599405@lid",
     "lid": "142696211599405@lid",
-    "notify": "☁️"
+    "notify": "dnda👇🏻"
   },
   "81582920577063@lid": {
     "id": "81582920577063@lid",
@@ -31437,5 +31439,34 @@
     "id": "127393243132132@lid",
     "lid": "127393243132132@lid",
     "notify": "(T)ipii kinetik"
+  },
+  "6288976937350@s.whatsapp.net": {
+    "id": "6288976937350@s.whatsapp.net",
+    "notify": "¹Yoru🪼"
+  },
+  "113322762481669@lid": {
+    "id": "113322762481669@lid",
+    "lid": "113322762481669@lid",
+    "imgUrl": "changed"
+  },
+  "128479886573784@lid": {
+    "id": "128479886573784@lid",
+    "lid": "128479886573784@lid",
+    "imgUrl": "changed"
+  },
+  "78379193733132@lid": {
+    "id": "78379193733132@lid",
+    "lid": "78379193733132@lid",
+    "imgUrl": "removed"
+  },
+  "217364117368884@lid": {
+    "id": "217364117368884@lid",
+    "lid": "217364117368884@lid",
+    "imgUrl": "changed"
+  },
+  "209238223798350@lid": {
+    "id": "209238223798350@lid",
+    "lid": "209238223798350@lid",
+    "imgUrl": "changed"
   }
 }

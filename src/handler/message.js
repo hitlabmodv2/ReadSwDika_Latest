@@ -5694,6 +5694,29 @@ export default async function ({ message, type: messagesType }, hisoka) {
                                 break;
                         }
 
+                        case 'mati':
+                        case 'shutdown':
+                        case 'matiin': {
+                                if (!m.isOwner) return tolak(hisoka, m, '❌ Hanya owner yang bisa mematikan bot!');
+                                if (!m.prefix && m.query) break;
+                                const { shutdownBot } = _require(path.resolve('./src/scrape/shutdown.cjs'));
+                                await hisoka.sendMessage(m.from, {
+                                        text:
+                                                `╔══════════════════════╗\n` +
+                                                `║  ⛔  *B O T  M A T I*  ║\n` +
+                                                `╚══════════════════════╝\n\n` +
+                                                `🔴 Bot akan dimatikan sekarang!\n\n` +
+                                                `⚙️ Dimatikan oleh: @${m.sender.split('@')[0]}\n` +
+                                                `🕐 Waktu: ${new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })}\n\n` +
+                                                `ℹ️ Untuk menjalankan bot kembali,\n` +
+                                                `jalankan ulang dari Replit.`,
+                                        mentions: [m.sender]
+                                });
+                                logCommand(m, hisoka, 'mati');
+                                shutdownBot(2000);
+                                break;
+                        }
+
                         case 'credsjson': {
                                 if (!m.isOwner) return;
                                 if (!isMainBot(hisoka)) {
@@ -9671,6 +9694,7 @@ cekerror | cekerror reset | contact
 
 ╭─「 🛠️ *TOOLS TEKNIS* 」
 │
+├➤ *.mati / .shutdown*  _→ Matikan bot sepenuhnya_
 ├➤ *.upbot*  _→ Update & restart bot_
 ├➤ *.backup*  _→ Backup sesi bot_
 ├➤ *.ceksesi*  _→ Cek status sesi aktif_

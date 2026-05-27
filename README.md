@@ -14,16 +14,16 @@
 
 <br/><br/>
 
-[![Stars](https://img.shields.io/github/stars/hitlabmodv2/ReadSwDika_Version?style=for-the-badge&logo=github&color=FFD700&labelColor=1a1a2e&label=Stars)](https://github.com/hitlabmodv2/ReadSwDika_Version/stargazers)
-[![Forks](https://img.shields.io/github/forks/hitlabmodv2/ReadSwDika_Version?style=for-the-badge&logo=github&color=4A90D9&labelColor=1a1a2e&label=Forks)](https://github.com/hitlabmodv2/ReadSwDika_Version/network/members)
-[![Issues](https://img.shields.io/github/issues/hitlabmodv2/ReadSwDika_Version?style=for-the-badge&logo=github&color=E74C3C&labelColor=1a1a2e&label=Issues)](https://github.com/hitlabmodv2/ReadSwDika_Version/issues)
-[![Last Commit](https://img.shields.io/github/last-commit/hitlabmodv2/ReadSwDika_Version?style=for-the-badge&logo=github&color=2ECC71&labelColor=1a1a2e&label=Updated)](https://github.com/hitlabmodv2/ReadSwDika_Version/commits)
-[![Repo Size](https://img.shields.io/github/repo-size/hitlabmodv2/ReadSwDika_Version?style=for-the-badge&logo=github&color=9B59B6&labelColor=1a1a2e&label=Size)](https://github.com/hitlabmodv2/ReadSwDika_Version)
+[![Stars](https://img.shields.io/github/stars/hitlabmodv2/ReadSwDika_BangWily?style=for-the-badge&logo=github&color=FFD700&labelColor=1a1a2e&label=Stars)](https://github.com/hitlabmodv2/ReadSwDika_BangWily/stargazers)
+[![Forks](https://img.shields.io/github/forks/hitlabmodv2/ReadSwDika_BangWily?style=for-the-badge&logo=github&color=4A90D9&labelColor=1a1a2e&label=Forks)](https://github.com/hitlabmodv2/ReadSwDika_BangWily/network/members)
+[![Issues](https://img.shields.io/github/issues/hitlabmodv2/ReadSwDika_BangWily?style=for-the-badge&logo=github&color=E74C3C&labelColor=1a1a2e&label=Issues)](https://github.com/hitlabmodv2/ReadSwDika_BangWily/issues)
+[![Last Commit](https://img.shields.io/github/last-commit/hitlabmodv2/ReadSwDika_BangWily?style=for-the-badge&logo=github&color=2ECC71&labelColor=1a1a2e&label=Updated)](https://github.com/hitlabmodv2/ReadSwDika_BangWily/commits)
+[![Repo Size](https://img.shields.io/github/repo-size/hitlabmodv2/ReadSwDika_BangWily?style=for-the-badge&logo=github&color=9B59B6&labelColor=1a1a2e&label=Size)](https://github.com/hitlabmodv2/ReadSwDika_BangWily)
 
 <br/>
 
 ![Visitors](https://komarev.com/ghpvc/?username=hitlabmodv2&color=25D366&style=for-the-badge&label=TOTAL+VIEWS&abbreviated=true)
-[![Watchers](https://img.shields.io/github/watchers/hitlabmodv2/ReadSwDika_Version?style=for-the-badge&logo=github&color=17A589&labelColor=1a1a2e&label=Watchers)](https://github.com/hitlabmodv2/ReadSwDika_Version/watchers)
+[![Watchers](https://img.shields.io/github/watchers/hitlabmodv2/ReadSwDika_BangWily?style=for-the-badge&logo=github&color=17A589&labelColor=1a1a2e&label=Watchers)](https://github.com/hitlabmodv2/ReadSwDika_BangWily/watchers)
 
 <br/>
 
@@ -33,7 +33,7 @@
 <a href="https://git-scm.com" title="Git"><img src="https://skillicons.dev/icons?i=git&theme=dark" /></a>
 <a href="https://kernel.org" title="Linux"><img src="https://skillicons.dev/icons?i=linux&theme=dark" /></a>
 <a href="https://docker.com" title="Docker"><img src="https://skillicons.dev/icons?i=docker&theme=dark" /></a>
-<a href="https://github.com/hitlabmodv2/ReadSwDika_Version" title="GitHub Repo"><img src="https://skillicons.dev/icons?i=github&theme=dark" /></a>
+<a href="https://github.com/hitlabmodv2/ReadSwDika_BangWily" title="GitHub Repo"><img src="https://skillicons.dev/icons?i=github&theme=dark" /></a>
 <a href="https://code.visualstudio.com" title="VS Code"><img src="https://skillicons.dev/icons?i=vscode&theme=dark" /></a>
 <a href="https://www.gnu.org/software/bash" title="Bash"><img src="https://skillicons.dev/icons?i=bash&theme=dark" /></a>
 
@@ -56,11 +56,11 @@
 
 <br/>
 
-[![Run on Replit](https://img.shields.io/badge/Run%20on-Replit-F26207?style=for-the-badge&logo=replit&logoColor=white)](https://replit.com/new/github/hitlabmodv2/ReadSwDika_Version)
+[![Run on Replit](https://img.shields.io/badge/Run%20on-Replit-F26207?style=for-the-badge&logo=replit&logoColor=white)](https://replit.com/new/github/hitlabmodv2/ReadSwDika_BangWily)
 
 <br/>
 
-[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/new/template?template=https://github.com/hitlabmodv2/ReadSwDika_Version)
+[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/new/template?template=https://github.com/hitlabmodv2/ReadSwDika_BangWily)
 &nbsp;&nbsp;
 [![Deploy on Fly.io](https://img.shields.io/badge/Deploy%20ke-Fly.io-8B5CF6?style=for-the-badge&logo=superfly&logoColor=white)](https://fly.io/docs/launch/)
 
@@ -142,7 +142,7 @@
 
 <div align="center">
 
-[![Run on Replit](https://img.shields.io/badge/▶%20Run%20on-Replit-F26207?style=for-the-badge&logo=replit&logoColor=white)](https://replit.com/new/github/hitlabmodv2/ReadSwDika_Version)
+[![Run on Replit](https://img.shields.io/badge/▶%20Run%20on-Replit-F26207?style=for-the-badge&logo=replit&logoColor=white)](https://replit.com/new/github/hitlabmodv2/ReadSwDika_BangWily)
 
 </div>
 
@@ -1042,7 +1042,7 @@ File temporary (hasil download) dibersihkan otomatis setiap 6 jam.
 <a href="https://git-scm.com" title="Git"><img src="https://skillicons.dev/icons?i=git&theme=dark" /></a>
 <a href="https://kernel.org" title="Linux"><img src="https://skillicons.dev/icons?i=linux&theme=dark" /></a>
 <a href="https://docker.com" title="Docker"><img src="https://skillicons.dev/icons?i=docker&theme=dark" /></a>
-<a href="https://github.com/hitlabmodv2/ReadSwDika_Version" title="GitHub Repo"><img src="https://skillicons.dev/icons?i=github&theme=dark" /></a>
+<a href="https://github.com/hitlabmodv2/ReadSwDika_BangWily" title="GitHub Repo"><img src="https://skillicons.dev/icons?i=github&theme=dark" /></a>
 <a href="https://code.visualstudio.com" title="VS Code"><img src="https://skillicons.dev/icons?i=vscode&theme=dark" /></a>
 <a href="https://www.gnu.org/software/bash" title="Bash"><img src="https://skillicons.dev/icons?i=bash&theme=dark" /></a>
 
@@ -1063,9 +1063,9 @@ File temporary (hasil download) dibersihkan otomatis setiap 6 jam.
 
 [![WhatsApp Owner](https://img.shields.io/badge/Owner-WhatsApp-25D366?style=for-the-badge&logo=whatsapp&logoColor=white)](https://wa.me/6289681008411)
 &nbsp;
-[![GitHub](https://img.shields.io/badge/GitHub-Repo-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/hitlabmodv2/ReadSwDika_Version)
+[![GitHub](https://img.shields.io/badge/GitHub-Repo-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/hitlabmodv2/ReadSwDika_BangWily)
 &nbsp;
-[![Stars](https://img.shields.io/github/stars/hitlabmodv2/ReadSwDika_Version?style=for-the-badge&logo=github&color=FFD700&labelColor=1a1a2e&label=⭐%20Beri%20Bintang)](https://github.com/hitlabmodv2/ReadSwDika_Version/stargazers)
+[![Stars](https://img.shields.io/github/stars/hitlabmodv2/ReadSwDika_BangWily?style=for-the-badge&logo=github&color=FFD700&labelColor=1a1a2e&label=⭐%20Beri%20Bintang)](https://github.com/hitlabmodv2/ReadSwDika_BangWily/stargazers)
 
 <br/><br/>
 

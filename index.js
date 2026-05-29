@@ -633,6 +633,31 @@ async function main() {
                         const privacySettings = await hisoka.fetchPrivacySettings();
                         settings.write('privacy', privacySettings);
 
+                        // ── Auto-edit pesan restart setelah bot online kembali ──
+                        setTimeout(async () => {
+                                try {
+                                        const _rstData = kvGet('system/restart_notify', null);
+                                        if (_rstData?.key && _rstData?.from) {
+                                                const _rstMs = Date.now() - (_rstData.time || 0);
+                                                const _rstSec = Math.round(_rstMs / 1000);
+                                                const _rstWaktu = new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
+                                                await hisoka.sendMessage(_rstData.from, {
+                                                        text:
+                                                                `╔══════════════════════╗\n` +
+                                                                `║  ✅  *B O T  O N L I N E*  ║\n` +
+                                                                `╚══════════════════════╝\n\n` +
+                                                                `🟢 Bot sudah online kembali!\n\n` +
+                                                                `⚙️ Direstart oleh: @${(_rstData.by || '').split('@')[0]}\n` +
+                                                                `⏱️ Waktu restart: ${_rstSec} detik\n` +
+                                                                `🕐 Online pada: ${_rstWaktu}`,
+                                                        mentions: [_rstData.by],
+                                                        edit: _rstData.key
+                                                });
+                                                kvSet('system/restart_notify', null);
+                                        }
+                                } catch (_) {}
+                        }, 3000);
+
                         const commands = await getCaseName(path.join(process.cwd(), 'src', 'handler', 'message.js'));
                         hisoka.loadedCommands = commands;
 

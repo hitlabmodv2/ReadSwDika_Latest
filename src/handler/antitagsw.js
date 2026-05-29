@@ -157,6 +157,33 @@ function saveData(data) {
     }
 }
 
+const _LOG_KEY = 'security/antitagsw_log';
+const _LOG_MAX = 500;
+
+function appendLog(entry) {
+    try {
+        const logs = kvGet(_LOG_KEY, []);
+        logs.push(entry);
+        if (logs.length > _LOG_MAX) logs.splice(0, logs.length - _LOG_MAX);
+        kvSet(_LOG_KEY, logs);
+    } catch (_) {}
+}
+
+export function getAntiTagSWLog(groupId) {
+    try {
+        const logs = kvGet(_LOG_KEY, []);
+        return groupId ? logs.filter(l => l.gid === groupId) : logs;
+    } catch (_) { return []; }
+}
+
+export function clearAntiTagSWLog(groupId) {
+    try {
+        if (!groupId) { kvSet(_LOG_KEY, []); return; }
+        const logs = kvGet(_LOG_KEY, []);
+        kvSet(_LOG_KEY, logs.filter(l => l.gid !== groupId));
+    } catch (_) {}
+}
+
 function getSenderJid(message, hisoka) {
     let sender = message.key?.participant || message.participant;
 
@@ -305,20 +332,12 @@ export default async function handleAntiTagSW(message, hisoka) {
         if (groupMeta?.participants) {
             const senderParticipant = findParticipant(groupMeta.participants, senderNumberClean);
             if (senderParticipant?.admin) {
-                // Admin bebas tag status — bot konfirmasi ke grup
+                // Admin bebas tag status — balas tapi tanpa warning/kick
                 try {
-                    const adminMsg =
-                        `👑 *Admin* @${senderNumber} melakukan tag grup via status.\n` +
-                        `✅ Admin *diizinkan* — tidak ada peringatan.`;
-
                     await hisoka.sendMessage(remoteJid, {
-                        text: adminMsg,
+                        text: `👑 *Admin* @${senderNumber} melakukan tag grup via status.\n✅ Admin *diizinkan* — tidak ada peringatan.`,
                         contextInfo: { mentionedJid: [senderJid] }
                     }, { quoted: message });
-
-                    await hisoka.sendMessage(remoteJid, {
-                        react: { text: '👑', key: message.key }
-                    });
                 } catch (_) {}
                 return;
             }
@@ -340,6 +359,19 @@ export default async function handleAntiTagSW(message, hisoka) {
         const maxWarnings = antiTagSWConfig.maxWarnings ?? 3;
         saveData(freshData);
         Object.assign(data, freshData);
+
+        // Catat log pelanggaran (warn dulu, nanti di-overwrite ke kick jika sampai max)
+        const _logEntry = {
+            gid: remoteJid,
+            senderJid,
+            senderNum: senderNumber,
+            action: newWarn >= maxWarnings ? 'kick' : 'warn',
+            warnCount: newWarn,
+            maxWarn: maxWarnings,
+            method: tagMethod,
+            ts: Date.now(),
+        };
+        appendLog(_logEntry);
 
         const now = new Date();
         const timeStr = now.toLocaleTimeString('id-ID', {

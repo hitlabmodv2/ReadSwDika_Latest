@@ -1,0 +1,102 @@
+const axios = require('axios');
+const FormData = require('form-data');
+
+/**
+ * Menjalankan deteksi konten AI menggunakan layanan Decopy.ai
+ * 
+ * Fungsi ini mengirim teks ke API Decopy.ai untuk mendeteksi apakah konten tersebut ditulis oleh AI.
+ * Proses ini meliputi pembuatan job baru dan polling sampai hasil deteksi tersedia.
+ * By Nyxz: https://whatsapp.com/channel/0029VaAMjXT4yltWm1NBJV3J
+ *
+ * 
+ * @async
+ * @param {string} text - Teks yang akan dideteksi apakah dibuat oleh AI atau manusia
+ * 
+ * @returns {Promise<Object>} Object hasil response dengan struktur berikut:
+ * @returns {boolean} status - Status keberhasilan operasi (true jika berhasil, false jika gagal)
+ * @returns {string} [msg] - Pesan error jika status false
+ * @returns {Object} [data] - Data hasil deteksi jika status true
+ * @returns {string} [data.language] - Bahasa yang terdeteksi dari teks
+ * @returns {number} [data.predict] - Jumlah prediksi
+ * @returns {Array<Object>} [data.setences] - Array informasi deteksi per kalimat
+ * @returns {string} [data.setences[].content] - Isi kalimat yang dideteksi
+ * @returns {number} [data.setences[].score] - Skor kalimat (0-1, semakin tinggi semakin besar kemungkinan dibuat oleh AI)
+ * @returns {string} [data.setences[].score_persentase] - Skor dalam format persentase
+ * @returns {string} [data.setences[].status] - Status kalimat (AI-generated atau human-written)
+ * @returns {Object} [data.totalScores] - Skor total dari seluruh teks
+ * @returns {string} [data.totalScores.persentase] - Skor total dalam format persentase
+ * @returns {number} [data.totalScores.score] - Skor total dalam format angka (0-1)
+ * 
+ * @throws {Error} Jika terjadi kesalahan dalam proses HTTP atau pemrosesan response
+ * 
+ */
+
+async function AiDetector(text) {
+  try {
+    if (!text) return { status: false, msg: `Teks nya mana?` };
+    const headers = {
+      'Accept-Language': 'id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7',
+      'Origin': 'https://decopy.ai',
+      'Referer': 'https://decopy.ai/',
+      'User-Agent': 'Mozilla/5.0 (Linux; Android 14; NX769J Build/UKQ1.230917.001; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/130.0.6723.107 Mobile Safari/537.36'
+    }
+    const persenn = (num) => Math.round(num * 100) + '%';
+
+    const form = new FormData();
+    form.append("content", text);
+
+    const createJobResponse = await axios.post('https://api.decopy.ai/api/decopy/ai-content-detector/create-job', form, {
+      headers: {
+        ...form.getHeaders(),
+        ...headers
+      }
+    });
+
+    if (createJobResponse.data.code !== 100000) {
+      console.error("Gagal bikin job. Response:", createJobResponse.data);
+      return {
+        status: false,
+        msg: `Gagal mendeteksi`,
+        data: createJobResponse.data
+      };
+    }
+
+    const requestId = createJobResponse.data.result.request_id;
+
+    let respon = null;
+    while (!respon) {
+      await new Promise(resolve => setTimeout(resolve, 1500));
+
+      const getResultResponse = await axios.get(`https://api.decopy.ai/api/decopy/ai-content-detector/get-job/${requestId}`, { headers });
+
+      if (getResultResponse.data.code === 100000 && getResultResponse.data.result.output) {
+        respon = getResultResponse.data.result.output;
+      }
+    }
+    
+    const res = {
+      language: respon.language,
+      predict: respon.predict_count,
+      sentences: respon.sentences.map(item => ({
+        content: item.content,
+        score: item.score,
+        persentase: persenn(item.score),
+        status: item.status
+      })),
+      totalScores: {
+        persentase: persenn(respon.totalScore),
+        score: respon.totalScore
+      }
+    }
+    
+    return {
+      status: true,
+      data: res
+    };
+  } catch (e) {
+    return {
+      status: false,
+      msg: `Gagal mendapatkan respon, dengan pesan: ${e.message}`
+    };
+  }
+}

@@ -37,7 +37,7 @@ import { getUptimeFormatted, getBotStats } from '../db/botStats.js';
 import { logError, formatErrorReport, clearErrors, generateErrorFileTxt, getInfoErrorTxtPath, getErrorStats } from '../db/errorLog.js';
 import { startJadibot, startJadibotQR, stopJadibot, jadibotMap, jadibotConnectedAt, pendingJadibotChoices, formatPairingCode, maskNumber, parseJadibotDuration, getJadibotExpiry, formatRemainingTime, getJadibotExpirySummary, cleanupExpiredJadibots, removeJadibotExpiry, setPermanentJadibot, ensureJadibotExpiry, extendJadibotExpiry, scheduleJadibotExpiry } from '../helper/jadibot.js';
 import { hasViewOnceCache, getViewOnceCache } from '../helper/voCache.js';
-import { isAntiTagSWEnabled, toggleAntiTagSW, resetWarnings, getWarnings, getAllAntiTagSWGroups } from './antitagsw.js';
+import { isAntiTagSWEnabled, toggleAntiTagSW, resetWarnings, getWarnings, getAllAntiTagSWGroups, getAntiTagSWLog, clearAntiTagSWLog } from './antitagsw.js';
 // yg bawah pindah ke sini
 import { injectMessage } from '../helper/inject.js';
 import listenEvent from './event.js';
@@ -4159,6 +4159,157 @@ export default async function ({ message, type: messagesType }, hisoka) {
                         }
                 }
 
+                // ─── AntiTagSW reply-based delete dari .antitagsw list ───────────────
+                if (global.__antiTagSWListSessions?.size && m.quoted?.key?.id && (m.isOwner || m.isAdmin)) {
+                        const sessId = m.quoted.key.id;
+                        const sess = global.__antiTagSWListSessions?.get(sessId);
+                        if (sess && sess.from === m.from) {
+                                const rawReply = (m.text || m.body || '').trim().toLowerCase();
+                                if (rawReply) {
+                                        global.__antiTagSWListSessions.delete(sessId);
+                                        try {
+                                                const { groups: sessGroups } = sess;
+
+                                                if (rawReply === 'semua') {
+                                                        // Hapus semua
+                                                        const total = sessGroups.length;
+                                                        for (const g of sessGroups) toggleAntiTagSW(g.gid, false);
+                                                        await tolak(hisoka, m,
+                                                                `╭───〔 *🗑️ HAPUS SEMUA* 〕───╮\n` +
+                                                                `│\n` +
+                                                                `│ ✅ Semua grup dihapus!\n` +
+                                                                `│ 🗑️ Total: *${total} grup*\n` +
+                                                                `│ ⚠️ Semua warning juga direset.\n` +
+                                                                `│\n` +
+                                                                `╰────────────────────────────────────╯`
+                                                        );
+                                                } else if (rawReply === 'reset') {
+                                                        // Reset semua warning, grup tetap
+                                                        for (const g of sessGroups) resetWarnings(g.gid);
+                                                        await tolak(hisoka, m,
+                                                                `╭───〔 *🔄 RESET WARNING* 〕───╮\n` +
+                                                                `│\n` +
+                                                                `│ ✅ Warning direset!\n` +
+                                                                `│ 📊 Total: *${sessGroups.length} grup*\n` +
+                                                                `│ 🟢 Grup tetap terdaftar.\n` +
+                                                                `│\n` +
+                                                                `╰────────────────────────────────────╯`
+                                                        );
+                                                } else {
+                                                        // Parse angka: "1", "1,2", "1, 2, 3", dll
+                                                        const nums = rawReply.split(/[,\s]+/)
+                                                                .map(n => parseInt(n.trim(), 10))
+                                                                .filter(n => !isNaN(n) && n >= 1 && n <= sessGroups.length);
+                                                        const uniq = [...new Set(nums)];
+
+                                                        if (!uniq.length) {
+                                                                await tolak(hisoka, m,
+                                                                        `❌ Nomor tidak valid!\n` +
+                                                                        `Masukkan angka 1-${sessGroups.length}, contoh: *1* atau *1,2,3*\n` +
+                                                                        `Atau ketik *semua* / *reset*`
+                                                                );
+                                                        } else {
+                                                                const dihapus = [];
+                                                                for (const n of uniq) {
+                                                                        const g = sessGroups[n - 1];
+                                                                        if (g) {
+                                                                                toggleAntiTagSW(g.gid, false);
+                                                                                dihapus.push(`${n}. *${g.namaGrup}*`);
+                                                                        }
+                                                                }
+                                                                const listDihapus = dihapus.map(d => `│ ✅ ${d}`).join('\n');
+                                                                await tolak(hisoka, m,
+                                                                        `╭───〔 *🗑️ ANTITAGSW REMOVED* 〕───╮\n` +
+                                                                        `│\n` +
+                                                                        `│ ✅ *${dihapus.length} grup* berhasil dihapus!\n` +
+                                                                        `│\n` +
+                                                                        listDihapus + `\n` +
+                                                                        `│\n` +
+                                                                        `│ ⚠️ Warning di grup tersebut direset.\n` +
+                                                                        `│\n` +
+                                                                        `╰────────────────────────────────────╯`
+                                                                );
+                                                        }
+                                                }
+                                        } catch (e) {
+                                                await tolak(hisoka, m, `❌ Gagal proses: ${e.message}`);
+                                        }
+                                        return;
+                                }
+                        }
+                }
+
+                // ─── AntiTagSW delete callback ────────────────────────────────────────
+                if ((m.isOwner || m.isAdmin) && typeof m.text === 'string' && m.text.startsWith('__antitagsw_del__')) {
+                        const targetGid = m.text.slice('__antitagsw_del__'.length).trim();
+                        if (targetGid) {
+                                try {
+                                        let namaGrup = targetGid;
+                                        try { const mt = await hisoka.groupMetadata(targetGid); namaGrup = mt?.subject || targetGid; } catch { try { namaGrup = hisoka.groups?.read(targetGid)?.subject || targetGid; } catch {} }
+                                        toggleAntiTagSW(targetGid, false);
+                                        await tolak(hisoka, m,
+                                                `╭───〔 *🗑️ ANTITAGSW REMOVED* 〕───╮\n` +
+                                                `│\n` +
+                                                `│ ✅ Grup berhasil dihapus!\n` +
+                                                `│\n` +
+                                                `│ 📌 *${namaGrup}*\n` +
+                                                `│ 🆔 \`${targetGid}\`\n` +
+                                                `│\n` +
+                                                `│ ⚠️ Warning di grup ini juga direset.\n` +
+                                                `│\n` +
+                                                `╰────────────────────────────────────╯`
+                                        );
+                                } catch (e) {
+                                        await tolak(hisoka, m, `❌ Gagal hapus grup: ${e.message}`);
+                                }
+                                return;
+                        }
+                }
+
+                if ((m.isOwner || m.isAdmin) && typeof m.text === 'string' && m.text === '__antitagsw_delall__') {
+                        try {
+                                const allG = getAllAntiTagSWGroups();
+                                const total = allG.length;
+                                for (const gid of allG) toggleAntiTagSW(gid, false);
+                                await tolak(hisoka, m,
+                                        `╭───〔 *🗑️ ANTITAGSW HAPUS SEMUA* 〕───╮\n` +
+                                        `│\n` +
+                                        `│ ✅ Semua grup berhasil dihapus!\n` +
+                                        `│\n` +
+                                        `│ 🗑️ Total dihapus: *${total} grup*\n` +
+                                        `│ ⚠️ Semua warning juga direset.\n` +
+                                        `│\n` +
+                                        `│ 💡 Gunakan *.antitagsw add* untuk\n` +
+                                        `│    mendaftarkan ulang grup.\n` +
+                                        `│\n` +
+                                        `╰────────────────────────────────────╯`
+                                );
+                        } catch (e) {
+                                await tolak(hisoka, m, `❌ Gagal hapus semua: ${e.message}`);
+                        }
+                        return;
+                }
+
+                if ((m.isOwner || m.isAdmin) && typeof m.text === 'string' && m.text === '__antitagsw_resetall__') {
+                        try {
+                                const allG = getAllAntiTagSWGroups();
+                                for (const gid of allG) resetWarnings(gid);
+                                await tolak(hisoka, m,
+                                        `╭───〔 *🔄 ANTITAGSW RESET SEMUA* 〕───╮\n` +
+                                        `│\n` +
+                                        `│ ✅ Semua warning berhasil direset!\n` +
+                                        `│\n` +
+                                        `│ 📊 Total grup direset: *${allG.length} grup*\n` +
+                                        `│ 🟢 Grup tetap terdaftar di AntiTagSW.\n` +
+                                        `│\n` +
+                                        `╰────────────────────────────────────╯`
+                                );
+                        } catch (e) {
+                                await tolak(hisoka, m, `❌ Gagal reset semua: ${e.message}`);
+                        }
+                        return;
+                }
+
                 // ─── MusicAI generate helper ──────────────────────────────────────────
                 const _generateMusik = async (hisoka, m, params) => {
                         const { ChatMusicAPI, buildCaption } = _require(path.resolve('./src/scrape/chatmusic.cjs'));
@@ -5656,6 +5807,62 @@ export default async function ({ message, type: messagesType }, hisoka) {
                                 break;
                         }
 
+                        case 'ceksize':
+                        case 'disksize':
+                        case 'filesize': {
+                                if (!m.isOwner) return tolak(hisoka, m, '❌ Hanya owner yang bisa menggunakan perintah ini!');
+                                if (!m.prefix && m.query) break;
+                                try {
+                                        const { cekSizeWithProgress, buatPesanLoading } = _require(path.resolve('./src/scrape/ceksize.cjs'));
+
+                                        // Kirim pesan loading awal
+                                        const _csMsg = await hisoka.sendMessage(m.from, {
+                                                text: buatPesanLoading(0, 'Memulai...')
+                                        }, { quoted: m });
+
+                                        // Throttle edit — maks 1 edit per 1 detik biar ga rate limit
+                                        let _csLastEdit = 0;
+                                        let _csPending  = null;
+                                        let _csDone     = false;
+
+                                        const editLoading = async (pct, label) => {
+                                                if (_csDone) return; // stop semua update setelah selesai
+                                                const now  = Date.now();
+                                                const teks = buatPesanLoading(pct, label);
+                                                // Cancel pending lama
+                                                if (_csPending) { clearTimeout(_csPending); _csPending = null; }
+                                                if (now - _csLastEdit >= 1000) {
+                                                        _csLastEdit = now;
+                                                        try { await hisoka.sendMessage(m.from, { text: teks, edit: _csMsg.key }); } catch (_) {}
+                                                } else {
+                                                        const wait = 1000 - (now - _csLastEdit);
+                                                        _csPending = setTimeout(async () => {
+                                                                if (_csDone) return;
+                                                                _csLastEdit = Date.now();
+                                                                try { await hisoka.sendMessage(m.from, { text: teks, edit: _csMsg.key }); } catch (_) {}
+                                                        }, wait);
+                                                }
+                                        };
+
+                                        const hasil = await cekSizeWithProgress(20, editLoading);
+
+                                        // Matikan semua pending update sebelum edit final
+                                        _csDone = true;
+                                        if (_csPending) { clearTimeout(_csPending); _csPending = null; }
+
+                                        // Jeda kecil pastikan WA proses edit terakhir dulu
+                                        await new Promise(r => setTimeout(r, 600));
+
+                                        // Edit final — tampilkan hasil lengkap
+                                        await hisoka.sendMessage(m.from, { text: hasil.caption, edit: _csMsg.key });
+                                        logCommand(m, hisoka, 'ceksize');
+                                } catch (err) {
+                                        console.error('[ceksize] Error:', err.message);
+                                        await m.reply('❌ Gagal cek size: ' + err.message);
+                                }
+                                break;
+                        }
+
                         case '>':
                         case 'eval': {
                                 let result;
@@ -5711,9 +5918,40 @@ export default async function ({ message, type: messagesType }, hisoka) {
                                                 `ℹ️ Untuk menjalankan bot kembali,\n` +
                                                 `jalankan ulang dari Replit.`,
                                         mentions: [m.sender]
-                                });
+                                }, { quoted: m });
                                 logCommand(m, hisoka, 'mati');
                                 shutdownBot(2000);
+                                break;
+                        }
+
+                        case 'restart':
+                        case 'rebot':
+                        case 'rb': {
+                                if (!m.isOwner) return tolak(hisoka, m, '❌ Hanya owner yang bisa merestart bot!');
+                                if (!m.prefix && m.query) break;
+                                const { restartBot } = _require(path.resolve('./src/scrape/shutdown.cjs'));
+                                const _rstSent = await hisoka.sendMessage(m.from, {
+                                        text:
+                                                `╔══════════════════════╗\n` +
+                                                `║  🔄  *R E S T A R T*  ║\n` +
+                                                `╚══════════════════════╝\n\n` +
+                                                `♻️ Bot akan direstart sekarang!\n\n` +
+                                                `⚙️ Direstart oleh: @${m.sender.split('@')[0]}\n` +
+                                                `🕐 Waktu: ${new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })}\n\n` +
+                                                `⏳ Menunggu bot online kembali...`,
+                                        mentions: [m.sender]
+                                }, { quoted: m });
+                                try {
+                                        const { kvSet: _rstKvSet } = await import('../db/datadb.js');
+                                        _rstKvSet('system/restart_notify', {
+                                                from: m.from,
+                                                key: _rstSent?.key || null,
+                                                by: m.sender,
+                                                time: Date.now()
+                                        });
+                                } catch (_) {}
+                                logCommand(m, hisoka, 'restart');
+                                restartBot(2000);
                                 break;
                         }
 
@@ -14934,6 +15172,315 @@ hasil += `╰══════════════════════�
                                         resetWarnings(m.from);
                                         await tolak(hisoka, m, '✅ Semua warning AntiTagSW di grup ini telah direset!');
                                         logCommand(m, hisoka, 'antitagsw reset');
+
+                                } else if (arg.startsWith('warn')) {
+                                        if (!m.isOwner) return tolak(hisoka, m, '❌ Hanya owner yang bisa mengubah batas warning!');
+                                        const warnNum = parseInt((arg.replace(/^warn\s*/, '') || '').trim(), 10);
+                                        if (!warnNum || isNaN(warnNum) || warnNum < 1 || warnNum > 100) {
+                                                return tolak(hisoka, m,
+                                                        `╭───〔 *⚠️ ANTITAGSW WARN* 〕───╮\n` +
+                                                        `│\n` +
+                                                        `│ ❌ Angka tidak valid!\n` +
+                                                        `│\n` +
+                                                        `│ 📌 Format: *.antitagsw warn <angka>*\n` +
+                                                        `│ 📌 Contoh: *.antitagsw warn 5*\n` +
+                                                        `│\n` +
+                                                        `│ ℹ️ Angka valid: *1 - 100*\n` +
+                                                        `│\n` +
+                                                        `╰────────────────────────────────────╯`
+                                                );
+                                        }
+                                        const config = loadConfig();
+                                        if (!config.antiTagSW) config.antiTagSW = {};
+                                        const oldMax = config.antiTagSW.maxWarnings ?? 3;
+                                        config.antiTagSW.maxWarnings = warnNum;
+                                        saveConfig(config);
+                                        await tolak(hisoka, m,
+                                                `╭───〔 *⚠️ ANTITAGSW WARN* 〕───╮\n` +
+                                                `│\n` +
+                                                `│ ✅ Batas warning berhasil diubah!\n` +
+                                                `│\n` +
+                                                `│ 📊 Sebelum : *${oldMax}x*\n` +
+                                                `│ 📊 Sekarang: *${warnNum}x*\n` +
+                                                `│\n` +
+                                                `│ ℹ️ Anggota akan dikick setelah\n` +
+                                                `│    melanggar sebanyak *${warnNum}x*\n` +
+                                                `│\n` +
+                                                `│ 💾 Tersimpan ke config.json\n` +
+                                                `│\n` +
+                                                `╰────────────────────────────────────╯`
+                                        );
+                                        logCommand(m, hisoka, `antitagsw warn ${warnNum}`);
+
+                                } else if (arg === 'add') {
+                                        const config = loadConfig();
+                                        if (!config.antiTagSW?.enabled) {
+                                                if (!m.isOwner) return tolak(hisoka, m, '❌ Fitur AntiTagSW dinonaktifkan secara global.\nMinta owner aktifkan dulu: *.antitagsw global on*');
+                                                if (!config.antiTagSW) config.antiTagSW = {};
+                                                config.antiTagSW.enabled = true;
+                                                saveConfig(config);
+                                        }
+                                        const alreadyAdded = isAntiTagSWEnabled(m.from);
+                                        toggleAntiTagSW(m.from, true);
+                                        await tolak(hisoka, m,
+                                                `╭───〔 *✅ ANTI-TAG SEMUA WARGA* 〕───╮\n` +
+                                                `│\n` +
+                                                `│ ${alreadyAdded ? '🔄 Grup ini *sudah terdaftar* sebelumnya.' : '➕ Grup ini berhasil *ditambahkan!*'}\n` +
+                                                `│\n` +
+                                                `│ 🌐 Global   : 🟢 Aktif\n` +
+                                                `│ 📌 Grup ini : 🟢 *Aktif*\n` +
+                                                `│\n` +
+                                                `│ ⚙️ Konfigurasi:\n` +
+                                                `│ • Maks. warning: *${config.antiTagSW?.maxWarnings ?? 3}x*\n` +
+                                                `│\n` +
+                                                `│ ℹ️ Anggota yang mentag grup lewat\n` +
+                                                `│    STATUS akan diperingatkan & dikick!\n` +
+                                                `│\n` +
+                                                `╰────────────────────────────────────╯`
+                                        );
+                                        logCommand(m, hisoka, 'antitagsw add');
+
+                                } else if (arg === 'list') {
+                                        if (!m.isOwner && !m.isAdmin) return tolak(hisoka, m, '❌ Hanya owner atau admin yang bisa melihat daftar ini!');
+                                        const allGroups = getAllAntiTagSWGroups();
+                                        if (!allGroups.length) {
+                                                return tolak(hisoka, m,
+                                                        `╭───〔 *📋 DAFTAR ANTITAGSW* 〕───╮\n` +
+                                                        `│\n` +
+                                                        `│ ❌ Belum ada grup yang terdaftar.\n` +
+                                                        `│\n` +
+                                                        `│ Gunakan *.antitagsw add* di grup\n` +
+                                                        `│ yang ingin diaktifkan.\n` +
+                                                        `│\n` +
+                                                        `╰────────────────────────────────────╯`
+                                                );
+                                        }
+
+                                        // Load botadmin cache sekali
+                                        const botAdminCache = kvGet('botadmin/botadmin', {});
+                                        const botNum = (hisoka.user?.id || '').split(':')[0].split('@')[0];
+
+                                        // Fetch info tiap grup realtime
+                                        const grupInfoList = [];
+                                        for (let i = 0; i < allGroups.length; i++) {
+                                                const gid = allGroups[i];
+                                                let namaGrup = '-';
+                                                let totalMember = '?';
+                                                let totalAdmin = '?';
+                                                let botIsAdmin = botAdminCache[gid] === true;
+
+                                                try {
+                                                        const meta = await hisoka.groupMetadata(gid);
+                                                        if (meta) {
+                                                                namaGrup = meta.subject || '-';
+                                                                const participants = meta.participants || [];
+                                                                totalMember = participants.length;
+                                                                totalAdmin = participants.filter(p => p.admin).length;
+                                                                // Cek bot admin realtime dari metadata
+                                                                const botP = participants.find(p => {
+                                                                        const pNum = (p.jid || p.id || '').split('@')[0].split(':')[0];
+                                                                        return pNum === botNum;
+                                                                });
+                                                                botIsAdmin = !!botP?.admin;
+                                                        }
+                                                } catch {
+                                                        try {
+                                                                const cached = hisoka.groups?.read(gid);
+                                                                if (cached) {
+                                                                        namaGrup = cached.subject || '-';
+                                                                        const participants = cached.participants || [];
+                                                                        totalMember = participants.length;
+                                                                        totalAdmin = participants.filter(p => p.admin).length;
+                                                                }
+                                                        } catch {}
+                                                }
+
+                                                const warnings = getWarnings(gid);
+                                                const totalWarned = Object.keys(warnings).length;
+                                                grupInfoList.push({ gid, namaGrup, totalMember, totalAdmin, totalWarned, botIsAdmin });
+                                        }
+
+                                        // Bangun teks list
+                                        let listBaris = '';
+                                        for (let i = 0; i < grupInfoList.length; i++) {
+                                                const { gid, namaGrup, totalMember, totalAdmin, totalWarned, botIsAdmin } = grupInfoList[i];
+                                                listBaris +=
+                                                        `│ *${i + 1}.* ${namaGrup}\n` +
+                                                        `│    🆔 \`${gid}\`\n` +
+                                                        `│    👥 Anggota : *${totalMember}* | 🛡️ Admin: *${totalAdmin}*\n` +
+                                                        `│    🤖 Bot Admin: ${botIsAdmin ? '✅ Ya' : '❌ Bukan'}\n` +
+                                                        `│    ⚠️ Warned  : *${totalWarned} orang*\n` +
+                                                        `│\n`;
+                                        }
+
+                                        const listText =
+                                                `╭───〔 *📋 DAFTAR ANTITAGSW* 〕───╮\n` +
+                                                `│\n` +
+                                                `│ 🟢 Total aktif: *${allGroups.length} grup*\n` +
+                                                `│\n` +
+                                                listBaris +
+                                                `│ ─────────────────────────────────\n` +
+                                                `│ 🗑️ *Cara hapus:*\n` +
+                                                `│ Reply pesan ini dengan nomor urut\n` +
+                                                `│ Contoh: *1* atau *1,2* atau *1,2,3*\n` +
+                                                `│\n` +
+                                                `│ Ketik *semua* → hapus semua grup\n` +
+                                                `│ Ketik *reset* → reset warning semua\n` +
+                                                `│\n` +
+                                                `╰────────────────────────────────────╯`;
+
+                                        // Kirim list dan simpan session untuk reply-based deletion
+                                        if (!global.__antiTagSWListSessions) global.__antiTagSWListSessions = new Map();
+                                        const sentList = await hisoka.sendMessage(m.from, { text: listText }, { quoted: m }).catch(() => null);
+                                        if (sentList?.key?.id) {
+                                                global.__antiTagSWListSessions.set(sentList.key.id, {
+                                                        groups: grupInfoList,
+                                                        from: m.from,
+                                                        by: m.sender || m.key?.participant || m.from,
+                                                        ts: Date.now()
+                                                });
+                                                // Auto expire 5 menit
+                                                setTimeout(() => global.__antiTagSWListSessions?.delete(sentList.key.id), 5 * 60 * 1000);
+                                        }
+                                        logCommand(m, hisoka, 'antitagsw list');
+
+                                } else if (arg === 'log' || arg.startsWith('log ')) {
+                                        // Ambil sub-arg: "log", "log all", "log clear", "log clear all"
+                                        const logSub = arg.slice(3).trim(); // '' | 'all' | 'clear' | 'clear all'
+
+                                        if (logSub === 'clear all') {
+                                                if (!m.isOwner) return tolak(hisoka, m, '❌ Hanya owner yang bisa clear semua log!');
+                                                clearAntiTagSWLog();
+                                                return tolak(hisoka, m, '✅ Semua log AntiTagSW berhasil dihapus!');
+                                        }
+
+                                        if (logSub === 'clear') {
+                                                clearAntiTagSWLog(m.from);
+                                                return tolak(hisoka, m, '✅ Log AntiTagSW grup ini berhasil dihapus!');
+                                        }
+
+                                        const showAll = (logSub === 'all') && m.isOwner;
+                                        const rawLogs = getAntiTagSWLog(showAll ? null : m.from);
+
+                                        if (!rawLogs.length) {
+                                                return tolak(hisoka, m,
+                                                        `╭───〔 *📜 LOG ANTITAGSW* 〕───╮\n` +
+                                                        `│\n` +
+                                                        `│ ℹ️ Belum ada riwayat pelanggaran${showAll ? '' : ' di grup ini'}.\n` +
+                                                        `│\n` +
+                                                        `│ 📋 Sub-perintah:\n` +
+                                                        `│ • *.antitagsw log*       → Log grup ini\n` +
+                                                        (m.isOwner ? `│ • *.antitagsw log all*   → Semua grup\n` : '') +
+                                                        `│ • *.antitagsw log clear* → Hapus log grup ini\n` +
+                                                        (m.isOwner ? `│ • *.antitagsw log clear all* → Hapus semua\n` : '') +
+                                                        `│\n` +
+                                                        `╰────────────────────────────────────╯`
+                                                );
+                                        }
+
+                                        const _fmtWaktu = (ts) => new Date(ts).toLocaleString('id-ID', {
+                                                timeZone: 'Asia/Jakarta',
+                                                day: '2-digit', month: '2-digit', year: '2-digit',
+                                                hour: '2-digit', minute: '2-digit'
+                                        });
+                                        const _fmtAction = (l) => l.action === 'kick' ? `🔴 KICK` : `🟡 WARN ${l.warnCount}/${l.maxWarn}`;
+
+                                        const totalWarn = rawLogs.filter(l => l.action === 'warn').length;
+                                        const totalKick = rawLogs.filter(l => l.action === 'kick').length;
+
+                                        if (showAll) {
+                                                // ── LOG ALL: dikelompokkan per grup ──
+                                                // Kelompokkan log per gid
+                                                const byGid = {};
+                                                for (const l of rawLogs) {
+                                                        if (!byGid[l.gid]) byGid[l.gid] = [];
+                                                        byGid[l.gid].push(l);
+                                                }
+                                                const uniqueGids = Object.keys(byGid);
+
+                                                // Fetch nama grup semua sekaligus (paralel)
+                                                const namaGrupCache = {};
+                                                await Promise.all(uniqueGids.map(async (gid) => {
+                                                        try {
+                                                                const mt = await hisoka.groupMetadata(gid);
+                                                                namaGrupCache[gid] = mt?.subject || gid.split('@')[0];
+                                                        } catch {
+                                                                try { namaGrupCache[gid] = hisoka.groups?.read(gid)?.subject || gid.split('@')[0]; }
+                                                                catch { namaGrupCache[gid] = gid.split('@')[0]; }
+                                                        }
+                                                }));
+
+                                                // Kirim per grup (maks 10 grup per pesan, sisanya pesan baru)
+                                                const GRUP_PER_MSG = 5;
+                                                const header =
+                                                        `╭───〔 *📜 LOG ANTITAGSW — SEMUA GRUP* 〕───╮\n` +
+                                                        `│\n` +
+                                                        `│ 🏘️ Jumlah grup: *${uniqueGids.length}*\n` +
+                                                        `│ 📊 Total log  : *${rawLogs.length}*\n` +
+                                                        `│ 🟡 Warn: *${totalWarn}* | 🔴 Kick: *${totalKick}*\n` +
+                                                        `│\n` +
+                                                        `╰────────────────────────────────────╯`;
+                                                await tolak(hisoka, m, header);
+
+                                                // Kirim per batch grup
+                                                for (let gi = 0; gi < uniqueGids.length; gi += GRUP_PER_MSG) {
+                                                        const batch = uniqueGids.slice(gi, gi + GRUP_PER_MSG);
+                                                        let batchTxt = '';
+                                                        for (const gid of batch) {
+                                                                const logs = byGid[gid].slice(-10).reverse(); // 10 terbaru per grup
+                                                                const gWarn = byGid[gid].filter(l => l.action === 'warn').length;
+                                                                const gKick = byGid[gid].filter(l => l.action === 'kick').length;
+                                                                batchTxt +=
+                                                                        `┌─〔 *🏘️ ${namaGrupCache[gid]}* 〕\n` +
+                                                                        `│ 📊 Total: *${byGid[gid].length}* | 🟡 ${gWarn} warn | 🔴 ${gKick} kick\n` +
+                                                                        `│ (${logs.length} terbaru)\n` +
+                                                                        `│\n`;
+                                                                for (let i = 0; i < logs.length; i++) {
+                                                                        const l = logs[i];
+                                                                        batchTxt +=
+                                                                                `│ *${i + 1}.* ${_fmtAction(l)}\n` +
+                                                                                `│    👤 @${l.senderNum}\n` +
+                                                                                `│    📡 ${l.method || '-'} • 🕐 ${_fmtWaktu(l.ts)}\n` +
+                                                                                `│\n`;
+                                                                }
+                                                                batchTxt += `└────────────────────────────────\n\n`;
+                                                        }
+                                                        await hisoka.sendMessage(m.from, { text: batchTxt.trim() }).catch(() => {});
+                                                        // Delay kecil antar batch agar tidak flood
+                                                        if (gi + GRUP_PER_MSG < uniqueGids.length) await new Promise(r => setTimeout(r, 600));
+                                                }
+
+                                        } else {
+                                                // ── LOG GRUP INI: urut waktu, 25 terbaru ──
+                                                const recentLogs = rawLogs.slice(-25).reverse();
+                                                let logBaris = '';
+                                                for (let i = 0; i < recentLogs.length; i++) {
+                                                        const l = recentLogs[i];
+                                                        logBaris +=
+                                                                `│ *${i + 1}.* ${_fmtAction(l)}\n` +
+                                                                `│    👤 @${l.senderNum}\n` +
+                                                                `│    📡 ${l.method || '-'} • 🕐 ${_fmtWaktu(l.ts)}\n` +
+                                                                `│\n`;
+                                                }
+                                                await tolak(hisoka, m,
+                                                        `╭───〔 *📜 LOG ANTITAGSW* 〕───╮\n` +
+                                                        `│\n` +
+                                                        `│ 📊 Total log grup ini: *${rawLogs.length}*\n` +
+                                                        `│ 🟡 Warn: *${totalWarn}* | 🔴 Kick: *${totalKick}*\n` +
+                                                        `│ (Tampil 25 terbaru)\n` +
+                                                        `│\n` +
+                                                        logBaris +
+                                                        `│ 📋 Sub-perintah:\n` +
+                                                        `│ • *.antitagsw log*       → Log grup ini\n` +
+                                                        (m.isOwner ? `│ • *.antitagsw log all*   → Semua grup\n` : '') +
+                                                        `│ • *.antitagsw log clear* → Hapus log grup ini\n` +
+                                                        (m.isOwner ? `│ • *.antitagsw log clear all* → Hapus semua\n` : '') +
+                                                        `│\n` +
+                                                        `╰────────────────────────────────────╯`
+                                                );
+                                        }
+                                        logCommand(m, hisoka, 'antitagsw log');
+
                                 } else {
                                         const config = loadConfig();
                                         const isEnabled = isAntiTagSWEnabled(m.from);
@@ -14941,11 +15488,25 @@ hasil += `╰══════════════════════�
                                         const warnings = getWarnings(m.from);
                                         const totalWarned = Object.keys(warnings).length;
 
+                                        // Tentukan status label grup
+                                        let grupStatus;
+                                        if (isEnabled) {
+                                                grupStatus = '🟢 Aktif';
+                                        } else if (globalEnabled) {
+                                                grupStatus = '🔴 Nonaktif *(belum ditambahkan)*';
+                                        } else {
+                                                grupStatus = '🔴 Nonaktif';
+                                        }
+
+                                        const hintAdd = globalEnabled && !isEnabled
+                                                ? `│ 💡 Ketik *.antitagsw add* untuk\n│    mengaktifkan di grup ini!\n│\n`
+                                                : '';
+
                                         let statusText =
                                                 `╭───〔 *ℹ️ ANTI-TAG SEMUA WARGA* 〕───╮\n` +
                                                 `│\n` +
                                                 `│ 🌐 Global   : ${globalEnabled ? '🟢 Aktif' : '🔴 Nonaktif'}\n` +
-                                                `│ 📌 Grup ini : ${isEnabled ? '🟢 Aktif' : '🔴 Nonaktif'}\n` +
+                                                `│ 📌 Grup ini : ${grupStatus}\n` +
                                                 `│\n` +
                                                 `│ ⚙️ Konfigurasi:\n` +
                                                 `│ • Maks. warning: *${config.antiTagSW?.maxWarnings ?? 3}x*\n` +
@@ -14953,11 +15514,17 @@ hasil += `╰══════════════════════�
                                                 `│\n` +
                                                 `│ ℹ️ Mendeteksi tag grup via STATUS\n` +
                                                 `│\n` +
+                                                hintAdd +
                                                 `│ 📋 Cara penggunaan:\n` +
-                                                `│ • *.antitagsw on*  → Aktifkan\n` +
-                                                `│ • *.antitagsw off* → Nonaktifkan\n` +
-                                                `│ • *.antitagsw reset* → Reset warning\n` +
+                                                `│ • *.antitagsw add*      → Tambah grup ini\n` +
+                                                `│ • *.antitagsw on*       → Aktifkan\n` +
+                                                `│ • *.antitagsw off*      → Nonaktifkan\n` +
+                                                `│ • *.antitagsw reset*    → Reset warning\n` +
+                                                `│ • *.antitagsw list*     → Daftar grup aktif\n` +
+                                                `│ • *.antitagsw log*      → Riwayat pelanggaran\n` +
                                                 (m.isOwner ?
+                                                `│ • *.antitagsw warn <n>* → Set maks warning\n` +
+                                                `│ • *.antitagsw log all*  → Log semua grup\n` +
                                                 `│ • *.antitagsw global on*  → Aktifkan global\n` +
                                                 `│ • *.antitagsw global off* → Nonaktifkan global\n` : '') +
                                                 `│\n` +

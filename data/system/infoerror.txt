@@ -8,7 +8,7 @@
 ════════════════════════════════════════════════════════════════════════
   FILE     : infoerror.txt
   Bot      : Wily Bot
-  Update   : 27/05/2026, 06.06.17  (realtime — diperbarui otomatis setiap ada error)
+  Update   : 29/05/2026, 09.32.17  (realtime — diperbarui otomatis setiap ada error)
 ════════════════════════════════════════════════════════════════════════
 
   RINGKASAN
@@ -23,24 +23,24 @@
 ────────────────────────────────────────────────────────────────────────
 
 ┌───────────────────────────────────────────────────────────────────────
-│  #001  —  unhandledRejection
+│  #001  —  console.error
 ├┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
 │  PESAN ERROR
-│  Connection Closed
+│  [31m[HotReload] ✗ Gagal reload 'src/handler/message.js', pakai versi lama.[39m
 │
 │  DETAIL
-│  Sumber      : unhandledRejection
+│  Sumber      : console.error
 │  Frekuensi   : 1x (baru terjadi)
-│  Pertama     : 27/05/2026, 06.06.17
-│  Terakhir    : 27/05/2026, 06.06.17
+│  Pertama     : 29/05/2026, 09.32.17
+│  Terakhir    : 29/05/2026, 09.32.17
 │
 │  STACK TRACE (3 baris pertama)
-│  ▶  Error: Connection Closed
-│     at sendRawMessage (/home/runner/workspace/node_modules/socketon/lib/Socket/socket.js:63:19)
-│     at sendNode (/home/runner/workspace/node_modules/socketon/lib/Socket/socket.js:82:16)
+│  ▶  Error: [31m[HotReload] ✗ Gagal reload 'src/handler/message.js', pakai versi lama.[39m
+│     at console.error (file:///home/runner/workspace/index.js:366:27)
+│     at Timeout._onTimeout (file:///home/runner/workspace/src/helper/hotReload.js:102:29)
 └───────────────────────────────────────────────────────────────────────
 
 ════════════════════════════════════════════════════════════════════════
   End of Report  —  Total: 1 jenis, 1 kejadian
-  Terakhir diperbarui: 27/05/2026, 06.06.17
+  Terakhir diperbarui: 29/05/2026, 09.32.17
 ════════════════════════════════════════════════════════════════════════

@@ -20866,7 +20866,8 @@
     "id": "62859106779529@s.whatsapp.net",
     "name": "𝐕𝐡𝐚𝐬𝐲𝐚 | 𝐍𝐨𝐚 𝐅𝐢𝐥𝐢𝐚𝐫𝐞𝐠𝐢𝐬",
     "lid": "250736164220991@lid",
-    "jid": "62859106779529@s.whatsapp.net"
+    "jid": "62859106779529@s.whatsapp.net",
+    "notify": "𝐃𝐚𝐬𝐯𝐢𝐝𝐚𝐧𝐢𝐲𝐚"
   },
   "62881010436955@s.whatsapp.net": {
     "isContact": true,
@@ -31715,5 +31716,20 @@
     "id": "6283123405940@s.whatsapp.net",
     "notify": "rawrrrr amanah_selalu",
     "verifiedName": "rawrrrr amanah_selalu"
+  },
+  "250736164220991@lid": {
+    "id": "250736164220991@lid",
+    "lid": "250736164220991@lid",
+    "notify": "𝐃𝐚𝐬𝐯𝐢𝐝𝐚𝐧𝐢𝐲𝐚"
+  },
+  "177739084640403@lid": {
+    "id": "177739084640403@lid",
+    "lid": "177739084640403@lid",
+    "imgUrl": "removed"
+  },
+  "263445207371837@lid": {
+    "id": "263445207371837@lid",
+    "lid": "263445207371837@lid",
+    "notify": "Rendra pulang ada gulali"
   }
 }

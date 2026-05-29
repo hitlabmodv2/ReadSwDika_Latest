@@ -38,9 +38,5 @@ sessions/**
 .token.secret
 .repo.last
 
-# node_modules — exclude folder yang berat (install via npm install)
-node_modules/@tensorflow/
-node_modules/@ffmpeg-installer/
-node_modules/nsfwjs/
-node_modules/@img/
-node_modules/typescript/
+# node_modules — exclude semua (install ulang via npm install)
+node_modules/

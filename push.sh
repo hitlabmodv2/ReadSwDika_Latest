@@ -32,7 +32,7 @@ USER="hitlabmodv2"
 REPO="ReadSwDika_BangWily"
 # DEFAULT_BRANCH di-auto-detect realtime dari GitHub (lihat detect_default_branch).
 # Nilai di sini cuma fallback kalau koneksi ke GitHub bermasalah.
-DEFAULT_BRANCH="BANGWILY_1"
+DEFAULT_BRANCH="BANGWILY_3"
 
 # Versi script ini — dipakai untuk cek update otomatis
 SCRIPT_VERSION="1.1"
@@ -663,19 +663,13 @@ setup_token() {
     if [ -f .token.secret ]; then
       echo -e "  ${C_RED}[4]${C_RESET} ${C_BOLD}Hapus token tersimpan${C_RESET} ${C_DIM}— reset .token.secret${C_RESET}" >&2
     fi
-    # Opsi 5: install node_modules (selalu tampil)
-    if [ "$_nm_missing" = "1" ]; then
-      echo -e "  ${C_MAGENTA}[5]${C_RESET} ${C_BOLD}Install node_modules${C_RESET}  ${C_DIM}— jalankan npm install sekarang${C_RESET}  ${C_RED}⚠ belum ada${C_RESET}" >&2
-    else
-      echo -e "  ${C_MAGENTA}[5]${C_RESET} ${C_BOLD}Install node_modules${C_RESET}  ${C_DIM}— jalankan npm install ulang${C_RESET}" >&2
-    fi
     echo -e "  ${C_DIM}[0]${C_RESET} ${C_DIM}Keluar${C_RESET}" >&2
     echo "" >&2
     echo -e "${C_DIM}  ─────────────────────────────────────────────────${C_RESET}" >&2
     if [ -f .token.secret ]; then
-      printf "  ${C_BOLD}Pilih [0/1/2/3/4/5] ▸ ${C_RESET}" >&2
+      printf "  ${C_BOLD}Pilih [0/1/2/3/4] ▸ ${C_RESET}" >&2
     else
-      printf "  ${C_BOLD}Pilih [0/1/2/3/5] ▸ ${C_RESET}" >&2
+      printf "  ${C_BOLD}Pilih [0/1/2/3] ▸ ${C_RESET}" >&2
     fi
     local _tok_type=""
     read -r _tok_type </dev/tty
@@ -690,12 +684,6 @@ setup_token() {
       exit 0
     fi
 
-    # ── Pilihan 5: install node_modules ─────────────────────────────────────
-    if [ "$_tok_type" = "5" ]; then
-      action_install_node_modules
-      tok=""
-      continue
-    fi
 
     # ── Pilihan 4: hapus token tersimpan ────────────────────────────────────
     if [ "$_tok_type" = "4" ]; then
@@ -792,6 +780,34 @@ setup_token() {
 ━━━━━━━━━━━━━━━━━━━━
 🕐 ${_ts_tok3}" "$_btn_tok3" 2>/dev/null &
       sleep 1
+      # ── Auto-install node_modules jika belum ada / tidak lengkap ────────────
+      # Cek: folder ada, .bin ada, dan jumlah package >= deps di package.json
+      local _nm_ok=1
+      if [ ! -d node_modules ] || [ ! -d node_modules/.bin ]; then
+        _nm_ok=0
+      else
+        # Bandingkan jumlah deps di package.json vs yang terinstall
+        local _dep_count=0 _inst_count=0
+        if [ -f package.json ] && command -v node >/dev/null 2>&1; then
+          _dep_count=$(node -e "
+            try {
+              const p=JSON.parse(require('fs').readFileSync('package.json','utf8'));
+              const d=Object.keys(p.dependencies||{}).length+Object.keys(p.devDependencies||{}).length;
+              process.stdout.write(String(d));
+            } catch(e){ process.stdout.write('0'); }
+          " 2>/dev/null)
+        fi
+        _inst_count=$(ls -1 node_modules 2>/dev/null | grep -v '^\.' | wc -l | tr -d ' ')
+        _dep_count="${_dep_count:-0}"
+        _inst_count="${_inst_count:-0}"
+        # Kalau yang terinstall < 50% dari deps → anggap tidak lengkap
+        if [ "$_dep_count" -gt 0 ] 2>/dev/null && [ "$_inst_count" -lt $(( _dep_count / 2 )) ] 2>/dev/null; then
+          _nm_ok=0
+        fi
+      fi
+      if [ "$_nm_ok" = "0" ]; then
+        action_install_node_modules --auto
+      fi
       tok="$input_tok3"
       continue
     fi
@@ -1685,16 +1701,11 @@ prepare_stage() {
     esac
   done
 
-  # node_modules: hapus folder BERAT dari tracking, sisanya biarkan ter-upload.
-  for heavy in node_modules/@tensorflow \
-               node_modules/@ffmpeg-installer \
-               node_modules/nsfwjs \
-               node_modules/@img \
-               node_modules/typescript; do
-    if git ls-files --error-unmatch "$heavy" >/dev/null 2>&1; then
-      git rm -r --cached -q "$heavy" 2>>"$err_log" || true
-    fi
-  done
+  # node_modules: SELALU untrack penuh — tidak pernah di-upload ke GitHub.
+  # User cukup jalankan `npm install` setelah clone.
+  if git ls-files --error-unmatch node_modules/ >/dev/null 2>&1; then
+    git rm -r --cached -q node_modules/ 2>>"$err_log" || true
+  fi
 
   # ⚠️  KEAMANAN: Auto-untrack .token.secret agar token asli tidak pernah ke-commit.
   if git ls-files --error-unmatch .token.secret >/dev/null 2>&1; then
@@ -1730,29 +1741,13 @@ prepare_stage() {
     git add -f "$forced" 2>>"$err_log" || true
   done
 
-  # Force-add node_modules (kecuali folder berat) — bypass global gitignore.
-  # Auto-detect: folder yang ukurannya >= NM_SKIP_MB akan di-skip otomatis.
-  if [ -d "node_modules" ]; then
-    git add -f node_modules/ 2>>"$err_log" || true
-    local _nm_skipped=0
-    local _nm_kept=0
-    local _skip_mb="${NM_SKIP_MB:-5}"
-    while IFS= read -r _nm_dir; do
-      [ -d "$_nm_dir" ] || continue
-      local _sz
-      _sz=$(du -sm "$_nm_dir" 2>/dev/null | cut -f1)
-      _sz="${_sz:-0}"
-      # Pastikan _sz adalah angka murni (hindari error aritmatik)
-      _sz=$(echo "$_sz" | tr -cd '0-9')
-      _sz="${_sz:-0}"
-      if [ "$_sz" -ge "$_skip_mb" ] 2>/dev/null; then
-        git rm -r --cached -q "$_nm_dir" 2>/dev/null || true
-        _nm_skipped=$(( _nm_skipped + 1 ))
-      else
-        _nm_kept=$(( _nm_kept + 1 ))
-      fi
-    done < <(find node_modules -maxdepth 1 -mindepth 1 -type d 2>/dev/null)
-    echo -e "  ${C_DIM}   node_modules: ${C_RESET}${C_GREEN}${_nm_kept} folder ringan di-upload${C_RESET}${C_DIM}, ${_nm_skipped} folder berat di-skip (>= ${_skip_mb}MB)${C_RESET}"
+  # node_modules TIDAK di-upload — sudah di-exclude penuh via .gitignore.
+  # Pastikan tidak ada sisa tracking dari commit lama.
+  if git ls-files --error-unmatch node_modules/ >/dev/null 2>&1; then
+    git rm -r --cached -q node_modules/ 2>/dev/null || true
+    echo -e "  ${C_YELLOW}📦 node_modules di-untrack dari git (tidak di-upload). Jalankan npm install setelah clone.${C_RESET}"
+  else
+    echo -e "  ${C_DIM}   node_modules: tidak di-upload (excluded via .gitignore) ✓${C_RESET}"
   fi
 
   # Kalau ada error non-fatal, tampilkan singkat (tapi jangan stop).
@@ -1966,8 +1961,12 @@ _check_internet() {
   return 1
 }
 
-# ===== Install node_modules (dipanggil dari token menu [5] dan main menu [n]) =====
+# ===== Install node_modules (dipanggil dari token menu dan main menu) =====
+# Gunakan argumen "--auto" untuk skip konfirmasi (otomatis langsung install).
 action_install_node_modules() {
+  local _auto_mode=0
+  [ "$1" = "--auto" ] && _auto_mode=1
+
   clear >/dev/tty 2>/dev/null || true
   echo -e "${C_BOLD}╔══════════════════════════════════════════════════╗${C_RESET}"
   echo -e "${C_BOLD}║        📦  INSTALL NODE_MODULES — BANG WILY      ║${C_RESET}"
@@ -1987,24 +1986,33 @@ action_install_node_modules() {
   if ! _check_internet; then
     printf "\r${C_RED}  ❌  Tidak ada koneksi internet! npm install membutuhkan koneksi.${C_RESET}\n"
     echo ""
-    printf "  ${C_DIM}Tekan Enter untuk kembali...${C_RESET}"
-    read -r </dev/tty
+    if [ "$_auto_mode" = "1" ]; then
+      echo -e "  ${C_DIM}Auto-install dilewati — tidak ada koneksi.${C_RESET}"
+      sleep 2
+    else
+      printf "  ${C_DIM}Tekan Enter untuk kembali...${C_RESET}"
+      read -r </dev/tty
+    fi
     return 1
   fi
   printf "\r  ${C_GREEN}✅  Koneksi internet OK${C_RESET}              \n"
   echo ""
-  # ── Konfirmasi sebelum install ────────────────────────────────────────
-  echo -e "${C_DIM}  ──────────────────────────────────${C_RESET}"
-  printf "  ${C_GREEN}y${C_RESET} ${C_BOLD}›${C_RESET} Lanjut install      ${C_RED}n${C_RESET} ${C_BOLD}›${C_RESET} Batal\n"
-  echo -e "${C_DIM}  ──────────────────────────────────${C_RESET}"
-  printf "  ${C_BOLD}▸ ${C_RESET}"
-  local _confirm_nm
-  read -r _confirm_nm </dev/tty
-  _confirm_nm=$(printf '%s' "$_confirm_nm" | tr '[:upper:]' '[:lower:]' | tr -d ' \r\n')
-  if [ "$_confirm_nm" != "y" ]; then
-    echo -e "\n  ${C_DIM}Install dibatalkan.${C_RESET}"
-    sleep 1
-    return
+  # ── Konfirmasi sebelum install (skip kalau --auto) ────────────────────
+  if [ "$_auto_mode" = "0" ]; then
+    echo -e "${C_DIM}  ──────────────────────────────────${C_RESET}"
+    printf "  ${C_GREEN}y${C_RESET} ${C_BOLD}›${C_RESET} Lanjut install      ${C_RED}n${C_RESET} ${C_BOLD}›${C_RESET} Batal\n"
+    echo -e "${C_DIM}  ──────────────────────────────────${C_RESET}"
+    printf "  ${C_BOLD}▸ ${C_RESET}"
+    local _confirm_nm
+    read -r _confirm_nm </dev/tty
+    _confirm_nm=$(printf '%s' "$_confirm_nm" | tr '[:upper:]' '[:lower:]' | tr -d ' \r\n')
+    if [ "$_confirm_nm" != "y" ]; then
+      echo -e "\n  ${C_DIM}Install dibatalkan.${C_RESET}"
+      sleep 1
+      return
+    fi
+  else
+    echo -e "  ${C_DIM}Mode otomatis — langsung install tanpa konfirmasi.${C_RESET}"
   fi
   echo ""
   echo -e "  ${C_DIM}Menjalankan npm install — harap tunggu...${C_RESET}"
